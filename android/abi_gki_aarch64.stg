@@ -331592,6 +331592,15 @@ elf_symbol {
   full_name: "__traceiter_android_vh_exit_check"
 }
 elf_symbol {
+  id: 0x1f554c2a
+  name: "__traceiter_android_vh_exit_signal"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x2e198f4f
+  type_id: 0x9bdbdcc4
+  full_name: "__traceiter_android_vh_exit_signal"
+}
+elf_symbol {
   id: 0x343adff1
   name: "__traceiter_android_vh_exit_signal_whether_wake"
   is_defined: true
@@ -333516,6 +333525,15 @@ elf_symbol {
   crc: 0x4dbe5743
   type_id: 0x18ccbd2c
   full_name: "__tracepoint_android_vh_exit_check"
+}
+elf_symbol {
+  id: 0x0d418d38
+  name: "__tracepoint_android_vh_exit_signal"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0x1783452d
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_exit_signal"
 }
 elf_symbol {
   id: 0x2121385f
@@ -383705,6 +383723,7 @@ interface {
   symbol_id: 0x42312ccc
   symbol_id: 0xf432d1c9
   symbol_id: 0x1921d10d
+  symbol_id: 0x1f554c2a
   symbol_id: 0x343adff1
   symbol_id: 0x4d354aab
   symbol_id: 0xe172d11a
@@ -383919,6 +383938,7 @@ interface {
   symbol_id: 0x988719fa
   symbol_id: 0x732a182b
   symbol_id: 0x684e5f4f
+  symbol_id: 0x0d418d38
   symbol_id: 0x2121385f
   symbol_id: 0x888dea6d
   symbol_id: 0xbacc3060
