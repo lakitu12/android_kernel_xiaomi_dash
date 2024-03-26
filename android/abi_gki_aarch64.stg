@@ -317850,6 +317850,15 @@ function {
   parameter_id: 0x13580d6c
 }
 function {
+  id: 0x9bd1d928
+  return_type_id: 0x6720d32f
+  parameter_id: 0x18bd6530
+  parameter_id: 0x1d19a9d5
+  parameter_id: 0x2e029f76
+  parameter_id: 0x6720d32f
+  parameter_id: 0x6720d32f
+}
+function {
   id: 0x9bd21a8b
   return_type_id: 0x6720d32f
   parameter_id: 0x18ea6ae3
@@ -332958,6 +332967,15 @@ elf_symbol {
   full_name: "__traceiter_android_vh_ipi_stop"
 }
 elf_symbol {
+  id: 0x0bf41403
+  name: "__traceiter_android_vh_irqtime_account_process_tick"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xcbc721ff
+  type_id: 0x9bd1d928
+  full_name: "__traceiter_android_vh_irqtime_account_process_tick"
+}
+elf_symbol {
   id: 0x4dca46cc
   name: "__traceiter_android_vh_is_fpsimd_save"
   is_defined: true
@@ -334981,6 +334999,15 @@ elf_symbol {
   crc: 0xa93bd013
   type_id: 0x18ccbd2c
   full_name: "__tracepoint_android_vh_ipi_stop"
+}
+elf_symbol {
+  id: 0x31457bed
+  name: "__tracepoint_android_vh_irqtime_account_process_tick"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0x78696e76
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_irqtime_account_process_tick"
 }
 elf_symbol {
   id: 0x62c13726
@@ -385916,6 +385943,7 @@ interface {
   symbol_id: 0x4b67a5dc
   symbol_id: 0x3684a257
   symbol_id: 0x7ee652cd
+  symbol_id: 0x0bf41403
   symbol_id: 0x4dca46cc
   symbol_id: 0xf83fbd26
   symbol_id: 0x66cefe64
@@ -386141,6 +386169,7 @@ interface {
   symbol_id: 0xbbfc3b7e
   symbol_id: 0xdb161c79
   symbol_id: 0x1d442b97
+  symbol_id: 0x31457bed
   symbol_id: 0x62c13726
   symbol_id: 0xafbca760
   symbol_id: 0x39d42312
