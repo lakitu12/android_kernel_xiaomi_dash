@@ -13214,6 +13214,11 @@ pointer_reference {
   pointee_type_id: 0x8fda1bd5
 }
 pointer_reference {
+  id: 0x297432f2
+  kind: POINTER
+  pointee_type_id: 0x8f902d54
+}
+pointer_reference {
   id: 0x2974a3dd
   kind: POINTER
   pointee_type_id: 0x8f9269e8
@@ -44284,6 +44289,11 @@ member {
   offset: 320
 }
 member {
+  id: 0x241eaa02
+  name: "addr"
+  type_id: 0x33756485
+}
+member {
   id: 0x2425a5c3
   name: "addr"
   type_id: 0x087aa58e
@@ -66772,6 +66782,12 @@ member {
   name: "cpu"
   type_id: 0x6720d32f
   offset: 67520
+}
+member {
+  id: 0x5161b965
+  name: "cpu"
+  type_id: 0x6720d32f
+  offset: 96
 }
 member {
   id: 0x5161ba40
@@ -97731,6 +97747,12 @@ member {
   name: "handle"
   type_id: 0xc9082b19
   offset: 448
+}
+member {
+  id: 0xb87688ff
+  name: "handle"
+  type_id: 0x9519135f
+  offset: 64
 }
 member {
   id: 0xb8ca2a30
@@ -145739,6 +145761,12 @@ member {
   name: "pid"
   type_id: 0x6720d32f
   offset: 32
+}
+member {
+  id: 0x74ee4c9b
+  name: "pid"
+  type_id: 0x6720d32f
+  offset: 128
 }
 member {
   id: 0x74ee4df7
@@ -201808,6 +201836,12 @@ member {
   offset: 104
 }
 member {
+  id: 0xba11b0ec
+  name: "when"
+  type_id: 0x33756485
+  offset: 192
+}
+member {
   id: 0x9b1d6401
   name: "which"
   type_id: 0xe62ebf07
@@ -257085,6 +257119,19 @@ struct_union {
     bytesize: 16
     member_id: 0x0de57ce8
     member_id: 0x1352cf9f
+  }
+}
+struct_union {
+  id: 0x8f902d54
+  kind: STRUCT
+  name: "track"
+  definition {
+    bytesize: 32
+    member_id: 0x241eaa02
+    member_id: 0xb87688ff
+    member_id: 0x5161b965
+    member_id: 0x74ee4c9b
+    member_id: 0xba11b0ec
   }
 }
 struct_union {
@@ -314659,6 +314706,13 @@ function {
   parameter_id: 0x4585663f
 }
 function {
+  id: 0x9a101a10
+  return_type_id: 0x6720d32f
+  parameter_id: 0x18bd6530
+  parameter_id: 0x6d7f5ff6
+  parameter_id: 0x297432f2
+}
+function {
   id: 0x9a1334e6
   return_type_id: 0x6720d32f
   parameter_id: 0x18bd6530
@@ -333841,6 +333895,15 @@ elf_symbol {
   full_name: "__traceiter_android_vh_rwsem_write_wait_start"
 }
 elf_symbol {
+  id: 0x2540195e
+  name: "__traceiter_android_vh_save_track_hash"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x950795a2
+  type_id: 0x9a101a10
+  full_name: "__traceiter_android_vh_save_track_hash"
+}
+elf_symbol {
   id: 0x237634b3
   name: "__traceiter_android_vh_sched_setaffinity_early"
   is_defined: true
@@ -336170,6 +336233,15 @@ elf_symbol {
   crc: 0x24663cd4
   type_id: 0x18ccbd2c
   full_name: "__tracepoint_android_vh_rwsem_write_wait_start"
+}
+elf_symbol {
+  id: 0x1ce15a0c
+  name: "__tracepoint_android_vh_save_track_hash"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0x02099633
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_save_track_hash"
 }
 elf_symbol {
   id: 0x40d6a8c5
@@ -387038,6 +387110,7 @@ interface {
   symbol_id: 0x6fe41dd1
   symbol_id: 0x93333e39
   symbol_id: 0x947bd437
+  symbol_id: 0x2540195e
   symbol_id: 0x237634b3
   symbol_id: 0xb5ed74f6
   symbol_id: 0xedb34a44
@@ -387297,6 +387370,7 @@ interface {
   symbol_id: 0x878b3583
   symbol_id: 0x203fab27
   symbol_id: 0xbe3d9b79
+  symbol_id: 0x1ce15a0c
   symbol_id: 0x40d6a8c5
   symbol_id: 0x931fa088
   symbol_id: 0xaaf6a826
