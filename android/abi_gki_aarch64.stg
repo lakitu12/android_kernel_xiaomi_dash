@@ -9444,6 +9444,11 @@ pointer_reference {
   pointee_type_id: 0x48e906cc
 }
 pointer_reference {
+  id: 0x18af3144
+  kind: POINTER
+  pointee_type_id: 0x48fc238d
+}
+pointer_reference {
   id: 0x18b0eb5e
   kind: POINTER
   pointee_type_id: 0x48834be4
@@ -11382,6 +11387,11 @@ pointer_reference {
   id: 0x20dd48d4
   kind: POINTER
   pointee_type_id: 0xa935c5cf
+}
+pointer_reference {
+  id: 0x20e174a6
+  kind: POINTER
+  pointee_type_id: 0xa9c53404
 }
 pointer_reference {
   id: 0x20e2ed71
@@ -30987,6 +30997,11 @@ typedef {
   id: 0x49b889e7
   name: "pid_t"
   referred_type_id: 0x763389c7
+}
+typedef {
+  id: 0x16864222
+  name: "pkvm_handle_t"
+  referred_type_id: 0x4585663f
 }
 typedef {
   id: 0xf017819f
@@ -95304,6 +95319,12 @@ member {
   offset: 704
 }
 member {
+  id: 0x2f0a2f63
+  name: "get_iommu_id"
+  type_id: 0x20e174a6
+  offset: 128
+}
+member {
   id: 0xb94b330d
   name: "get_irq_reg"
   type_id: 0x3a8a7c39
@@ -106283,6 +106304,11 @@ member {
   type_id: 0x4585663f
   offset: 17153
   bitsize: 1
+}
+member {
+  id: 0x1878fbd9
+  name: "init_driver"
+  type_id: 0x2df0016c
 }
 member {
   id: 0xa088567d
@@ -159924,6 +159950,12 @@ member {
   name: "remove_dev_pasid"
   type_id: 0x0e8de3e3
   offset: 960
+}
+member {
+  id: 0x64566c3f
+  name: "remove_driver"
+  type_id: 0x0eb62dc3
+  offset: 64
 }
 member {
   id: 0xcf681777
@@ -237433,6 +237465,17 @@ struct_union {
     bytesize: 24
     member_id: 0x5c7f890c
     member_id: 0x335fcb96
+  }
+}
+struct_union {
+  id: 0x48fc238d
+  kind: STRUCT
+  name: "kvm_iommu_driver"
+  definition {
+    bytesize: 24
+    member_id: 0x1878fbd9
+    member_id: 0x64566c3f
+    member_id: 0x2f0a2f63
   }
 }
 struct_union {
@@ -316903,6 +316946,13 @@ function {
   parameter_id: 0x11cfee5a
 }
 function {
+  id: 0x9b66b9f2
+  return_type_id: 0x6720d32f
+  parameter_id: 0x18bd6530
+  parameter_id: 0x33756485
+  parameter_id: 0x13580d6c
+}
+function {
   id: 0x9b6740c7
   return_type_id: 0x6720d32f
   parameter_id: 0x1aeeade4
@@ -317718,6 +317768,11 @@ function {
   parameter_id: 0x18bd6530
   parameter_id: 0x078316ff
   parameter_id: 0x6d7f5ff6
+}
+function {
+  id: 0x9bab2f7e
+  return_type_id: 0x6720d32f
+  parameter_id: 0x18af3144
 }
 function {
   id: 0x9bab32de
@@ -322531,6 +322586,11 @@ function {
   parameter_id: 0x030b9acf
 }
 function {
+  id: 0x9e22c8b8
+  return_type_id: 0x6720d32f
+  parameter_id: 0x0e88ae5c
+}
+function {
   id: 0x9e256fd0
   return_type_id: 0x6720d32f
   parameter_id: 0x0de4c6b1
@@ -323932,6 +323992,12 @@ function {
   parameter_id: 0x1ba902d8
 }
 function {
+  id: 0x9f5021bd
+  return_type_id: 0x6720d32f
+  parameter_id: 0x0b27dc43
+  parameter_id: 0x064d6086
+}
+function {
   id: 0x9f5327f4
   return_type_id: 0x6720d32f
   parameter_id: 0x0b4f136e
@@ -325238,6 +325304,11 @@ function {
   return_type_id: 0x39a4e83f
   parameter_id: 0x0258f96e
   parameter_id: 0x3e10b518
+}
+function {
+  id: 0xa9c53404
+  return_type_id: 0x16864222
+  parameter_id: 0x0258f96e
 }
 function {
   id: 0xaa55ab2e
@@ -331619,6 +331690,24 @@ elf_symbol {
   full_name: "__phy_modify"
 }
 elf_symbol {
+  id: 0xd9bec400
+  name: "__pkvm_load_el2_module"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x0ae91781
+  type_id: 0x9f5021bd
+  full_name: "__pkvm_load_el2_module"
+}
+elf_symbol {
+  id: 0xb35f76db
+  name: "__pkvm_register_el2_call"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xb5f464ad
+  type_id: 0x915dba0e
+  full_name: "__pkvm_register_el2_call"
+}
+elf_symbol {
   id: 0x430bd907
   name: "__platform_driver_probe"
   is_defined: true
@@ -332661,6 +332750,15 @@ elf_symbol {
   crc: 0x101a2d5e
   type_id: 0x9b5db5aa
   full_name: "__traceiter_android_rvh_iommu_alloc_insert_iova"
+}
+elf_symbol {
+  id: 0x9742b6be
+  name: "__traceiter_android_rvh_iommu_dma_info_to_prot"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xa7185617
+  type_id: 0x9b66b9f2
+  full_name: "__traceiter_android_rvh_iommu_dma_info_to_prot"
 }
 elf_symbol {
   id: 0x7edcea8d
@@ -335208,6 +335306,15 @@ elf_symbol {
   crc: 0x363ed37e
   type_id: 0x18ccbd2c
   full_name: "__tracepoint_android_rvh_iommu_alloc_insert_iova"
+}
+elf_symbol {
+  id: 0x456e9ebc
+  name: "__tracepoint_android_rvh_iommu_dma_info_to_prot"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0xbed6038a
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_rvh_iommu_dma_info_to_prot"
 }
 elf_symbol {
   id: 0x0991fcbf
@@ -361514,6 +361621,15 @@ elf_symbol {
   full_name: "kvm_arm_hyp_service_available"
 }
 elf_symbol {
+  id: 0x3e5c3d46
+  name: "kvm_iommu_register_driver"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xf8bf2e2c
+  type_id: 0x9bab2f7e
+  full_name: "kvm_iommu_register_driver"
+}
+elf_symbol {
   id: 0x3ae24a16
   name: "kvmalloc_node"
   is_defined: true
@@ -382133,6 +382249,15 @@ elf_symbol {
   full_name: "usb_check_bulk_endpoints"
 }
 elf_symbol {
+  id: 0x23a5ab99
+  name: "usb_choose_configuration"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xb479438b
+  type_id: 0x9edfdadc
+  full_name: "usb_choose_configuration"
+}
+elf_symbol {
   id: 0x2a589f64
   name: "usb_clear_halt"
   is_defined: true
@@ -386813,6 +386938,15 @@ elf_symbol {
   full_name: "xfrm_stateonly_find"
 }
 elf_symbol {
+  id: 0x994cfb6c
+  name: "xhci_add_endpoint"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x9c958cff
+  type_id: 0x94ebfe13
+  full_name: "xhci_add_endpoint"
+}
+elf_symbol {
   id: 0xafbe49ee
   name: "xhci_create_secondary_interrupter"
   is_defined: true
@@ -386820,6 +386954,15 @@ elf_symbol {
   crc: 0xb89dfec9
   type_id: 0xb8231ff0
   full_name: "xhci_create_secondary_interrupter"
+}
+elf_symbol {
+  id: 0xc6fdfac7
+  name: "xhci_enable_interrupter"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x6d647606
+  type_id: 0x9e22c8b8
+  full_name: "xhci_enable_interrupter"
 }
 elf_symbol {
   id: 0xc46f1f1f
@@ -387519,6 +387662,8 @@ interface {
   symbol_id: 0xf7e48028
   symbol_id: 0x34126b3d
   symbol_id: 0x28bdd181
+  symbol_id: 0xd9bec400
+  symbol_id: 0xb35f76db
   symbol_id: 0x430bd907
   symbol_id: 0x535df772
   symbol_id: 0xafd4e12a
@@ -387635,6 +387780,7 @@ interface {
   symbol_id: 0x41d29e07
   symbol_id: 0xe443e259
   symbol_id: 0x0b1353da
+  symbol_id: 0x9742b6be
   symbol_id: 0x7edcea8d
   symbol_id: 0x72c43156
   symbol_id: 0x61e95c07
@@ -387918,6 +388064,7 @@ interface {
   symbol_id: 0x47c27595
   symbol_id: 0x7fd0bf2f
   symbol_id: 0x58127eb8
+  symbol_id: 0x456e9ebc
   symbol_id: 0x0991fcbf
   symbol_id: 0x693af5b0
   symbol_id: 0x59d74b45
@@ -390839,6 +390986,7 @@ interface {
   symbol_id: 0xa91d5234
   symbol_id: 0xc9a0daac
   symbol_id: 0x63b579b3
+  symbol_id: 0x3e5c3d46
   symbol_id: 0x3ae24a16
   symbol_id: 0xbbe14755
   symbol_id: 0x709f7fc8
@@ -393131,6 +393279,7 @@ interface {
   symbol_id: 0x9e6e4c47
   symbol_id: 0x1f68a496
   symbol_id: 0x12289dad
+  symbol_id: 0x23a5ab99
   symbol_id: 0x2a589f64
   symbol_id: 0x7da41bc7
   symbol_id: 0x795a4305
@@ -393651,7 +393800,9 @@ interface {
   symbol_id: 0x8f8f2df9
   symbol_id: 0xeb912db7
   symbol_id: 0x64876ecd
+  symbol_id: 0x994cfb6c
   symbol_id: 0xafbe49ee
+  symbol_id: 0xc6fdfac7
   symbol_id: 0xc46f1f1f
   symbol_id: 0xf30af7b3
   symbol_id: 0xc9a9e8ab
