@@ -298183,6 +298183,11 @@ function {
   parameter_id: 0x310ec01d
 }
 function {
+  id: 0x2864f998
+  return_type_id: 0x33756485
+  parameter_id: 0x6720d32f
+}
+function {
   id: 0x287ec3b4
   return_type_id: 0x002136b3
   parameter_id: 0x229b7399
@@ -318652,6 +318657,14 @@ function {
   parameter_id: 0x141e84b4
 }
 function {
+  id: 0x9bddb3a2
+  return_type_id: 0x6720d32f
+  parameter_id: 0x18bd6530
+  parameter_id: 0x1d19a9d5
+  parameter_id: 0x18a16691
+  parameter_id: 0x11cfee5a
+}
+function {
   id: 0x9bddb929
   return_type_id: 0x6720d32f
   parameter_id: 0x18ea6ae3
@@ -332277,6 +332290,15 @@ elf_symbol {
   full_name: "__traceiter_android_rvh_can_migrate_task"
 }
 elf_symbol {
+  id: 0xbbd04d50
+  name: "__traceiter_android_rvh_cgroup_force_kthread_migration"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xf445b2ea
+  type_id: 0x9bddb3a2
+  full_name: "__traceiter_android_rvh_cgroup_force_kthread_migration"
+}
+elf_symbol {
   id: 0x9d00b8f0
   name: "__traceiter_android_rvh_check_preempt_wakeup"
   is_defined: true
@@ -334678,6 +334700,15 @@ elf_symbol {
   crc: 0x47b7bc68
   type_id: 0x18ccbd2c
   full_name: "__tracepoint_android_rvh_can_migrate_task"
+}
+elf_symbol {
+  id: 0xb208306e
+  name: "__tracepoint_android_rvh_cgroup_force_kthread_migration"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0x30e18576
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_rvh_cgroup_force_kthread_migration"
 }
 elf_symbol {
   id: 0x1dd402e6
@@ -378659,6 +378690,24 @@ elf_symbol {
   full_name: "tcpm_vbus_change"
 }
 elf_symbol {
+  id: 0x7cfd9233
+  name: "teo_cpu_get_util_threshold"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x0482d3ad
+  type_id: 0x2864f998
+  full_name: "teo_cpu_get_util_threshold"
+}
+elf_symbol {
+  id: 0xbd25c7d0
+  name: "teo_cpu_set_util_threshold"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xba6e00b6
+  type_id: 0x099db0ca
+  full_name: "teo_cpu_set_util_threshold"
+}
+elf_symbol {
   id: 0x5bbd3545
   name: "thermal_cdev_update"
   is_defined: true
@@ -387109,6 +387158,7 @@ interface {
   symbol_id: 0x0b48afa1
   symbol_id: 0x192bbbd5
   symbol_id: 0xadc13d20
+  symbol_id: 0xbbd04d50
   symbol_id: 0x9d00b8f0
   symbol_id: 0xfd6e4093
   symbol_id: 0xf11256cf
@@ -387376,6 +387426,7 @@ interface {
   symbol_id: 0x748c1fd7
   symbol_id: 0x1e8a7e23
   symbol_id: 0xfe3875f6
+  symbol_id: 0xb208306e
   symbol_id: 0x1dd402e6
   symbol_id: 0xf63515c9
   symbol_id: 0xf4fe0429
@@ -392262,6 +392313,8 @@ interface {
   symbol_id: 0xae3ea97c
   symbol_id: 0x591431f1
   symbol_id: 0x6869c83d
+  symbol_id: 0x7cfd9233
+  symbol_id: 0xbd25c7d0
   symbol_id: 0x5bbd3545
   symbol_id: 0xf4017fdd
   symbol_id: 0x2d1f2cdd
