@@ -322762,6 +322762,15 @@ elf_symbol {
   full_name: "blk_mq_free_tag_set"
 }
 elf_symbol {
+  id: 0x5e553962
+  name: "blk_mq_freeze_queue"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xf23669e6
+  type_id: 0x12c8ce83
+  full_name: "blk_mq_freeze_queue"
+}
+elf_symbol {
   id: 0x16569be2
   name: "blk_mq_map_queues"
   is_defined: true
@@ -322823,6 +322832,15 @@ elf_symbol {
   crc: 0xc5db4d46
   type_id: 0x181a6fb5
   full_name: "blk_mq_stop_hw_queue"
+}
+elf_symbol {
+  id: 0x95bdba0c
+  name: "blk_mq_unfreeze_queue"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x8b2cf927
+  type_id: 0x12c8ce83
+  full_name: "blk_mq_unfreeze_queue"
 }
 elf_symbol {
   id: 0xd2c9c20b
@@ -370766,6 +370784,7 @@ interface {
   symbol_id: 0x1996f188
   symbol_id: 0xbc2fc882
   symbol_id: 0x70bd48bd
+  symbol_id: 0x5e553962
   symbol_id: 0x16569be2
   symbol_id: 0x1f81c0c0
   symbol_id: 0xcebb0cec
@@ -370773,6 +370792,7 @@ interface {
   symbol_id: 0x96f2cda8
   symbol_id: 0x1162870c
   symbol_id: 0x310e729f
+  symbol_id: 0x95bdba0c
   symbol_id: 0xd2c9c20b
   symbol_id: 0x86bec7f5
   symbol_id: 0xa36916c0
