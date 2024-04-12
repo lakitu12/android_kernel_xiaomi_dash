@@ -273609,6 +273609,12 @@ function {
   parameter_id: 0xf435685e
 }
 function {
+  id: 0x1172892f
+  return_type_id: 0x48b5725f
+  parameter_id: 0x0d7ce7cc
+  parameter_id: 0xad7853f7
+}
+function {
   id: 0x1172b988
   return_type_id: 0x0bfc9031
   parameter_id: 0x0258f96e
@@ -278596,6 +278602,13 @@ function {
   parameter_id: 0x6d7f5ff6
 }
 function {
+  id: 0x1a51b8d5
+  return_type_id: 0x48b5725f
+  parameter_id: 0x2d9d2fbb
+  parameter_id: 0x6d7f5ff6
+  parameter_id: 0x6d7f5ff6
+}
+function {
   id: 0x1a5a9df1
   return_type_id: 0x48b5725f
   parameter_id: 0x29c600bb
@@ -278943,6 +278956,12 @@ function {
   id: 0x1b00783f
   return_type_id: 0x48b5725f
   parameter_id: 0x2e60a6b2
+}
+function {
+  id: 0x1b0758a9
+  return_type_id: 0x48b5725f
+  parameter_id: 0x2d9d2fbb
+  parameter_id: 0x3e10b518
 }
 function {
   id: 0x1b0d4d60
@@ -297040,6 +297059,11 @@ function {
   parameter_id: 0x3e10b518
 }
 function {
+  id: 0x99235c4d
+  return_type_id: 0x3e10b518
+  parameter_id: 0x2d9d2fbb
+}
+function {
   id: 0x9927b218
   return_type_id: 0x6720d32f
   parameter_id: 0x104d069a
@@ -312531,6 +312555,11 @@ function {
   parameter_id: 0x4585663f
 }
 function {
+  id: 0xffdfe86a
+  return_type_id: 0x17244d16
+  parameter_id: 0x3e10b518
+}
+function {
   id: 0xffe6827d
   return_type_id: 0x6d7f5ff6
   parameter_id: 0x054f691a
@@ -321034,6 +321063,15 @@ elf_symbol {
   crc: 0x11089ac7
   type_id: 0x4b395ad9
   full_name: "_ctype"
+}
+elf_symbol {
+  id: 0x602bd335
+  name: "_dev_alert"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x8c4f98cf
+  type_id: 0x1fa0c57a
+  full_name: "_dev_alert"
 }
 elf_symbol {
   id: 0x500c47a8
@@ -354086,6 +354124,24 @@ elf_symbol {
   full_name: "rfkill_destroy"
 }
 elf_symbol {
+  id: 0x48ae5586
+  name: "rfkill_find_type"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x50b73ce2
+  type_id: 0xffdfe86a
+  full_name: "rfkill_find_type"
+}
+elf_symbol {
+  id: 0xfba840ea
+  name: "rfkill_get_led_trigger_name"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xaa6f23ad
+  type_id: 0x99235c4d
+  full_name: "rfkill_get_led_trigger_name"
+}
+elf_symbol {
   id: 0x9562ae27
   name: "rfkill_init_sw_state"
   is_defined: true
@@ -354093,6 +354149,15 @@ elf_symbol {
   crc: 0xaad6d92f
   type_id: 0x1a4ae702
   full_name: "rfkill_init_sw_state"
+}
+elf_symbol {
+  id: 0xf985c978
+  name: "rfkill_pause_polling"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x3939f8f0
+  type_id: 0x1bff1a7d
+  full_name: "rfkill_pause_polling"
 }
 elf_symbol {
   id: 0x5ba6dff6
@@ -354122,6 +354187,24 @@ elf_symbol {
   full_name: "rfkill_set_hw_state_reason"
 }
 elf_symbol {
+  id: 0x821675f7
+  name: "rfkill_set_led_trigger_name"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x9cab34a6
+  type_id: 0x1b0758a9
+  full_name: "rfkill_set_led_trigger_name"
+}
+elf_symbol {
+  id: 0x2831202e
+  name: "rfkill_set_states"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x85b5e625
+  type_id: 0x1a51b8d5
+  full_name: "rfkill_set_states"
+}
+elf_symbol {
   id: 0x8be50e45
   name: "rfkill_set_sw_state"
   is_defined: true
@@ -354129,6 +354212,15 @@ elf_symbol {
   crc: 0x8a490c90
   type_id: 0xf476ed95
   full_name: "rfkill_set_sw_state"
+}
+elf_symbol {
+  id: 0x66112f81
+  name: "rfkill_soft_blocked"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xd24108d4
+  type_id: 0xf5c310ea
+  full_name: "rfkill_soft_blocked"
 }
 elf_symbol {
   id: 0x46449fce
@@ -365466,6 +365558,15 @@ elf_symbol {
   full_name: "usb_set_configuration"
 }
 elf_symbol {
+  id: 0x34af8a35
+  name: "usb_set_device_state"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x5eb93beb
+  type_id: 0x1172892f
+  full_name: "usb_set_device_state"
+}
+elf_symbol {
   id: 0x3cc50b4b
   name: "usb_set_interface"
   is_defined: true
@@ -370309,6 +370410,7 @@ interface {
   symbol_id: 0x5693f2df
   symbol_id: 0xb029aed0
   symbol_id: 0xa762593e
+  symbol_id: 0x602bd335
   symbol_id: 0x500c47a8
   symbol_id: 0x83d25041
   symbol_id: 0xd30e8a4f
@@ -373980,11 +374082,17 @@ interface {
   symbol_id: 0xa3f52060
   symbol_id: 0x001f1a24
   symbol_id: 0x46d54e34
+  symbol_id: 0x48ae5586
+  symbol_id: 0xfba840ea
   symbol_id: 0x9562ae27
+  symbol_id: 0xf985c978
   symbol_id: 0x5ba6dff6
   symbol_id: 0xf977c032
   symbol_id: 0x7802cb99
+  symbol_id: 0x821675f7
+  symbol_id: 0x2831202e
   symbol_id: 0x8be50e45
+  symbol_id: 0x66112f81
   symbol_id: 0x46449fce
   symbol_id: 0xfac46ac5
   symbol_id: 0xefa494ef
@@ -375245,6 +375353,7 @@ interface {
   symbol_id: 0x88509066
   symbol_id: 0x3f64aa24
   symbol_id: 0xedbb00b2
+  symbol_id: 0x34af8a35
   symbol_id: 0x3cc50b4b
   symbol_id: 0x85997d50
   symbol_id: 0x6d33fccc
