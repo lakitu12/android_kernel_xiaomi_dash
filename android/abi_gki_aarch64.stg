@@ -272324,6 +272324,14 @@ function {
   parameter_id: 0x343ebce3
 }
 function {
+  id: 0x0c5f338c
+  return_type_id: 0x33756485
+  parameter_id: 0xf1a6dfed
+  parameter_id: 0x6720d32f
+  parameter_id: 0x1d5bae2a
+  parameter_id: 0x6720d32f
+}
+function {
   id: 0x0cd36f30
   return_type_id: 0x33756485
   parameter_id: 0xf1a6dfed
@@ -356986,6 +356994,15 @@ elf_symbol {
   full_name: "show_regs"
 }
 elf_symbol {
+  id: 0x59a21b13
+  name: "shrink_slab"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xf1e26a7d
+  type_id: 0x0c5f338c
+  full_name: "shrink_slab"
+}
+elf_symbol {
   id: 0xaba9754d
   name: "si_mem_available"
   is_defined: true
@@ -374603,6 +374620,7 @@ interface {
   symbol_id: 0x436ee92c
   symbol_id: 0xdfd61aeb
   symbol_id: 0xbf6056e5
+  symbol_id: 0x59a21b13
   symbol_id: 0xaba9754d
   symbol_id: 0x6a9fad39
   symbol_id: 0x99c66454
