@@ -317342,6 +317342,42 @@ elf_symbol {
   full_name: "__traceiter_android_vh_printk_hotplug"
 }
 elf_symbol {
+  id: 0x7d069e91
+  name: "__traceiter_android_vh_record_mutex_lock_starttime"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x78835571
+  type_id: 0x9bd7019d
+  full_name: "__traceiter_android_vh_record_mutex_lock_starttime"
+}
+elf_symbol {
+  id: 0x0fa39b81
+  name: "__traceiter_android_vh_record_pcpu_rwsem_starttime"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x337d17ec
+  type_id: 0x9bd7019d
+  full_name: "__traceiter_android_vh_record_pcpu_rwsem_starttime"
+}
+elf_symbol {
+  id: 0x92518ec5
+  name: "__traceiter_android_vh_record_rtmutex_lock_starttime"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x03cabc7f
+  type_id: 0x9bd7019d
+  full_name: "__traceiter_android_vh_record_rtmutex_lock_starttime"
+}
+elf_symbol {
+  id: 0x9792c22e
+  name: "__traceiter_android_vh_record_rwsem_lock_starttime"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x13ec1b0b
+  type_id: 0x9bd7019d
+  full_name: "__traceiter_android_vh_record_rwsem_lock_starttime"
+}
+elf_symbol {
   id: 0xcef5d79f
   name: "__traceiter_android_vh_rproc_recovery"
   is_defined: true
@@ -320058,6 +320094,42 @@ elf_symbol {
   crc: 0xa2999f04
   type_id: 0x18ccbd2c
   full_name: "__tracepoint_android_vh_printk_hotplug"
+}
+elf_symbol {
+  id: 0x761f292f
+  name: "__tracepoint_android_vh_record_mutex_lock_starttime"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0x60aad161
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_record_mutex_lock_starttime"
+}
+elf_symbol {
+  id: 0xef7ad117
+  name: "__tracepoint_android_vh_record_pcpu_rwsem_starttime"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0x6550d31f
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_record_pcpu_rwsem_starttime"
+}
+elf_symbol {
+  id: 0x4568ff8f
+  name: "__tracepoint_android_vh_record_rtmutex_lock_starttime"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0xe4352710
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_record_rtmutex_lock_starttime"
+}
+elf_symbol {
+  id: 0xe918e2ec
+  name: "__tracepoint_android_vh_record_rwsem_lock_starttime"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0x49b81b0e
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_record_rwsem_lock_starttime"
 }
 elf_symbol {
   id: 0xd94bc301
@@ -370393,6 +370465,10 @@ interface {
   symbol_id: 0xfcc5e2bd
   symbol_id: 0xb2fed205
   symbol_id: 0x7d499dab
+  symbol_id: 0x7d069e91
+  symbol_id: 0x0fa39b81
+  symbol_id: 0x92518ec5
+  symbol_id: 0x9792c22e
   symbol_id: 0xcef5d79f
   symbol_id: 0x91384eff
   symbol_id: 0xd56fbf76
@@ -370695,6 +370771,10 @@ interface {
   symbol_id: 0x6c99d877
   symbol_id: 0x3fef4323
   symbol_id: 0x49b95a49
+  symbol_id: 0x761f292f
+  symbol_id: 0xef7ad117
+  symbol_id: 0x4568ff8f
+  symbol_id: 0xe918e2ec
   symbol_id: 0xd94bc301
   symbol_id: 0x3fc5ffc9
   symbol_id: 0xed43b088
