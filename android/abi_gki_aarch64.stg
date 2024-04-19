@@ -279061,6 +279061,13 @@ function {
   parameter_id: 0x2edfae47
 }
 function {
+  id: 0x1b338a63
+  return_type_id: 0x48b5725f
+  parameter_id: 0x2e94a1e1
+  parameter_id: 0x0258f96e
+  parameter_id: 0x1e41b656
+}
+function {
   id: 0x1b341a0e
   return_type_id: 0x48b5725f
   parameter_id: 0x2e94a1e1
@@ -341652,6 +341659,15 @@ elf_symbol {
   full_name: "iommu_attach_device"
 }
 elf_symbol {
+  id: 0x396b0c47
+  name: "iommu_attach_device_pasid"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x5bdd3436
+  type_id: 0x962b38df
+  full_name: "iommu_attach_device_pasid"
+}
+elf_symbol {
   id: 0xe80863b1
   name: "iommu_attach_group"
   is_defined: true
@@ -341668,6 +341684,15 @@ elf_symbol {
   crc: 0xc91fd85a
   type_id: 0x1b341a0e
   full_name: "iommu_detach_device"
+}
+elf_symbol {
+  id: 0x0566bca1
+  name: "iommu_detach_device_pasid"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xb906f633
+  type_id: 0x1b338a63
+  full_name: "iommu_detach_device_pasid"
 }
 elf_symbol {
   id: 0x4c05b91e
@@ -373391,8 +373416,10 @@ interface {
   symbol_id: 0x99224733
   symbol_id: 0xa4eabc87
   symbol_id: 0xd24a70f6
+  symbol_id: 0x396b0c47
   symbol_id: 0xe80863b1
   symbol_id: 0xd81a7d03
+  symbol_id: 0x0566bca1
   symbol_id: 0x4c05b91e
   symbol_id: 0xa5459730
   symbol_id: 0xe77a1ae2
