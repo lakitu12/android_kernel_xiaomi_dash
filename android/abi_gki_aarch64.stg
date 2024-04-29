@@ -301443,6 +301443,13 @@ function {
   parameter_id: 0x1c50c4ad
 }
 function {
+  id: 0x9aa0b156
+  return_type_id: 0x6720d32f
+  parameter_id: 0x18ea6ae3
+  parameter_id: 0x4585663f
+  parameter_id: 0x33756485
+}
+function {
   id: 0x9aa2d024
   return_type_id: 0x6720d32f
   parameter_id: 0x1d44326e
@@ -335976,6 +335983,15 @@ elf_symbol {
   full_name: "down_write"
 }
 elf_symbol {
+  id: 0xab93a1ea
+  name: "down_write_killable"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xf09499ee
+  type_id: 0x9daf738f
+  full_name: "down_write_killable"
+}
+elf_symbol {
   id: 0x626b81c7
   name: "down_write_trylock"
   is_defined: true
@@ -347309,6 +347325,15 @@ elf_symbol {
   crc: 0xbf557377
   type_id: 0x165fda2d
   full_name: "iter_file_splice_write"
+}
+elf_symbol {
+  id: 0xd4b34ea6
+  name: "iterate_dir"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x76425cd2
+  type_id: 0x9b41e906
+  full_name: "iterate_dir"
 }
 elf_symbol {
   id: 0x3c6496cb
@@ -361529,6 +361554,15 @@ elf_symbol {
   full_name: "sdio_writew"
 }
 elf_symbol {
+  id: 0xec171799
+  name: "security_file_ioctl"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x13fd1351
+  type_id: 0x9aa0b156
+  full_name: "security_file_ioctl"
+}
+elf_symbol {
   id: 0x5e6aee8f
   name: "security_release_secctx"
   is_defined: true
@@ -373152,6 +373186,15 @@ elf_symbol {
   full_name: "vfs_fsync_range"
 }
 elf_symbol {
+  id: 0xf89b49b7
+  name: "vfs_llseek"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x057708f9
+  type_id: 0x2d64ae3e
+  full_name: "vfs_llseek"
+}
+elf_symbol {
   id: 0x47f90fd0
   name: "video_devdata"
   is_defined: true
@@ -377672,6 +377715,7 @@ interface {
   symbol_id: 0x68deb409
   symbol_id: 0x3d2d0ba2
   symbol_id: 0x0d57c53d
+  symbol_id: 0xab93a1ea
   symbol_id: 0x626b81c7
   symbol_id: 0x4a57b168
   symbol_id: 0x8a417941
@@ -378931,6 +378975,7 @@ interface {
   symbol_id: 0xe4e974b3
   symbol_id: 0x99bcb7fe
   symbol_id: 0xbb7edccb
+  symbol_id: 0xd4b34ea6
   symbol_id: 0x3c6496cb
   symbol_id: 0xfea15456
   symbol_id: 0x124d42c2
@@ -380511,6 +380556,7 @@ interface {
   symbol_id: 0x4a4e8bee
   symbol_id: 0x5b060b7d
   symbol_id: 0xb3b8cbe2
+  symbol_id: 0xec171799
   symbol_id: 0x5e6aee8f
   symbol_id: 0x2b7a1822
   symbol_id: 0x24b9d7ed
@@ -381803,6 +381849,7 @@ interface {
   symbol_id: 0xa7ab6134
   symbol_id: 0x39607d61
   symbol_id: 0x1499f6a1
+  symbol_id: 0xf89b49b7
   symbol_id: 0x47f90fd0
   symbol_id: 0x969a2ec0
   symbol_id: 0xb1b42a22
