@@ -340464,6 +340464,15 @@ elf_symbol {
   full_name: "eth_header_parse"
 }
 elf_symbol {
+  id: 0x4d1f6490
+  name: "eth_header_parse_protocol"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xf9d00198
+  type_id: 0xed225d89
+  full_name: "eth_header_parse_protocol"
+}
+elf_symbol {
   id: 0x3179c651
   name: "eth_mac_addr"
   is_defined: true
@@ -378387,6 +378396,7 @@ interface {
   symbol_id: 0x134d07e5
   symbol_id: 0xcfde732b
   symbol_id: 0x260d2936
+  symbol_id: 0x4d1f6490
   symbol_id: 0x3179c651
   symbol_id: 0xdef4bdce
   symbol_id: 0xeeed0fcd
