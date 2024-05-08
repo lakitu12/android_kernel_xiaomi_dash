@@ -326783,6 +326783,15 @@ elf_symbol {
   full_name: "__wake_up_sync_key"
 }
 elf_symbol {
+  id: 0x583a248f
+  name: "__warn_flushing_systemwide_wq"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xc1198662
+  type_id: 0x10985193
+  full_name: "__warn_flushing_systemwide_wq"
+}
+elf_symbol {
   id: 0x61e806d8
   name: "__warn_printk"
   is_defined: true
@@ -344796,6 +344805,15 @@ elf_symbol {
   crc: 0x58ce36b4
   type_id: 0x5f272d07
   full_name: "gpiod_get"
+}
+elf_symbol {
+  id: 0x80497778
+  name: "gpiod_get_direction"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x58ecdad3
+  type_id: 0x94d8cba3
+  full_name: "gpiod_get_direction"
 }
 elf_symbol {
   id: 0xaca51db1
@@ -378412,6 +378430,7 @@ interface {
   symbol_id: 0x2168939c
   symbol_id: 0x83ada50d
   symbol_id: 0xe693da5d
+  symbol_id: 0x583a248f
   symbol_id: 0x61e806d8
   symbol_id: 0xcf1808d5
   symbol_id: 0x01b711f3
@@ -380412,6 +380431,7 @@ interface {
   symbol_id: 0xad2ad56b
   symbol_id: 0xfc326378
   symbol_id: 0x652eb3f5
+  symbol_id: 0x80497778
   symbol_id: 0xaca51db1
   symbol_id: 0x226f81df
   symbol_id: 0x4950fc9e
