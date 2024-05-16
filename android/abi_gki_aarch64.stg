@@ -266070,6 +266070,37 @@ enumeration {
   }
 }
 enumeration {
+  id: 0x87463428
+  name: "hid_class_request"
+  definition {
+    underlying_type_id: 0x4585663f
+    enumerator {
+      name: "HID_REQ_GET_REPORT"
+      value: 1
+    }
+    enumerator {
+      name: "HID_REQ_GET_IDLE"
+      value: 2
+    }
+    enumerator {
+      name: "HID_REQ_GET_PROTOCOL"
+      value: 3
+    }
+    enumerator {
+      name: "HID_REQ_SET_REPORT"
+      value: 9
+    }
+    enumerator {
+      name: "HID_REQ_SET_IDLE"
+      value: 10
+    }
+    enumerator {
+      name: "HID_REQ_SET_PROTOCOL"
+      value: 11
+    }
+  }
+}
+enumeration {
   id: 0xfa5f37bb
   name: "hid_report_type"
   definition {
@@ -276150,6 +276181,11 @@ function {
   id: 0x104c9db8
   return_type_id: 0x48b5725f
   parameter_id: 0x035330ac
+}
+function {
+  id: 0x104da524
+  return_type_id: 0x48b5725f
+  parameter_id: 0x0357d2dd
 }
 function {
   id: 0x104de2e4
@@ -309653,6 +309689,13 @@ function {
   parameter_id: 0x368ec5cb
 }
 function {
+  id: 0x9d760cc4
+  return_type_id: 0x6720d32f
+  parameter_id: 0x0357d2dd
+  parameter_id: 0x0b27dc43
+  parameter_id: 0x3e10b518
+}
+function {
   id: 0x9d763af9
   return_type_id: 0x6720d32f
   parameter_id: 0x0258f96e
@@ -312823,6 +312866,16 @@ function {
   parameter_id: 0xf435685e
   parameter_id: 0x5d8155a5
   parameter_id: 0x6720d32f
+}
+function {
+  id: 0x9f85a1ff
+  return_type_id: 0x6720d32f
+  parameter_id: 0x0de4c6b1
+  parameter_id: 0x5d8155a5
+  parameter_id: 0x2669d715
+  parameter_id: 0xf435685e
+  parameter_id: 0xfa5f37bb
+  parameter_id: 0x87463428
 }
 function {
   id: 0x9f87b817
@@ -319472,6 +319525,15 @@ elf_symbol {
   crc: 0xccd60c07
   type_id: 0x6d9955d1
   full_name: "__hci_cmd_sync_ev"
+}
+elf_symbol {
+  id: 0xb3d97fa3
+  name: "__hid_register_driver"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x23b9ae73
+  type_id: 0x9d760cc4
+  full_name: "__hid_register_driver"
 }
 elf_symbol {
   id: 0xf245d4a3
@@ -347424,6 +347486,60 @@ elf_symbol {
   full_name: "hid_destroy_device"
 }
 elf_symbol {
+  id: 0x8717f26f
+  name: "hid_hw_close"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x873a08c0
+  type_id: 0x13e1603f
+  full_name: "hid_hw_close"
+}
+elf_symbol {
+  id: 0x361004c8
+  name: "hid_hw_open"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xfaf32ac1
+  type_id: 0x9ef9d283
+  full_name: "hid_hw_open"
+}
+elf_symbol {
+  id: 0xcf5ea9a2
+  name: "hid_hw_output_report"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xa896c67d
+  type_id: 0x9e5d7885
+  full_name: "hid_hw_output_report"
+}
+elf_symbol {
+  id: 0x6c303862
+  name: "hid_hw_raw_request"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x7f75dbed
+  type_id: 0x9f85a1ff
+  full_name: "hid_hw_raw_request"
+}
+elf_symbol {
+  id: 0xfba34655
+  name: "hid_hw_start"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x1d4d88f0
+  type_id: 0x9fefc71b
+  full_name: "hid_hw_start"
+}
+elf_symbol {
+  id: 0x52d444b1
+  name: "hid_hw_stop"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x82757227
+  type_id: 0x13e1603f
+  full_name: "hid_hw_stop"
+}
+elf_symbol {
   id: 0x7d0e44ca
   name: "hid_ignore"
   is_defined: true
@@ -347442,6 +347558,15 @@ elf_symbol {
   full_name: "hid_input_report"
 }
 elf_symbol {
+  id: 0x0eb11e95
+  name: "hid_open_report"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x1bf3a4fd
+  type_id: 0x9ef9d283
+  full_name: "hid_open_report"
+}
+elf_symbol {
   id: 0x6ca4d0ed
   name: "hid_parse_report"
   is_defined: true
@@ -347449,6 +347574,15 @@ elf_symbol {
   crc: 0x63b6eb04
   type_id: 0x9e711486
   full_name: "hid_parse_report"
+}
+elf_symbol {
+  id: 0x6e37f09d
+  name: "hid_unregister_driver"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x6e3c10b6
+  type_id: 0x104da524
+  full_name: "hid_unregister_driver"
 }
 elf_symbol {
   id: 0x334ff68f
@@ -379913,6 +380047,7 @@ interface {
   symbol_id: 0x3a5255b8
   symbol_id: 0xa3a6c885
   symbol_id: 0x7efd1cdd
+  symbol_id: 0xb3d97fa3
   symbol_id: 0xf245d4a3
   symbol_id: 0x74b9825e
   symbol_id: 0xd672e937
@@ -383017,9 +383152,17 @@ interface {
   symbol_id: 0xccc593d6
   symbol_id: 0x97a02af0
   symbol_id: 0x2ffc7c7e
+  symbol_id: 0x8717f26f
+  symbol_id: 0x361004c8
+  symbol_id: 0xcf5ea9a2
+  symbol_id: 0x6c303862
+  symbol_id: 0xfba34655
+  symbol_id: 0x52d444b1
   symbol_id: 0x7d0e44ca
   symbol_id: 0x10de460f
+  symbol_id: 0x0eb11e95
   symbol_id: 0x6ca4d0ed
+  symbol_id: 0x6e37f09d
   symbol_id: 0x334ff68f
   symbol_id: 0xd7ecf501
   symbol_id: 0xa5f8942d
