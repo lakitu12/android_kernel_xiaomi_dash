@@ -323354,6 +323354,13 @@ function {
   parameter_id: 0x6720d32f
 }
 function {
+  id: 0x91e7fef3
+  return_type_id: 0x6720d32f
+  parameter_id: 0x318f8bcb
+  parameter_id: 0x026c3dea
+  parameter_id: 0x353f6734
+}
+function {
   id: 0x91e83077
   return_type_id: 0x6720d32f
   parameter_id: 0x32941b2b
@@ -415302,6 +415309,15 @@ elf_symbol {
   full_name: "v4l2_pipeline_link_notify"
 }
 elf_symbol {
+  id: 0x5f3882d0
+  name: "v4l2_s_ctrl"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xfe6ec6e2
+  type_id: 0x91e7fef3
+  full_name: "v4l2_s_ctrl"
+}
+elf_symbol {
   id: 0xe203e72f
   name: "v4l2_s_parm_cap"
   is_defined: true
@@ -425949,6 +425965,7 @@ interface {
   symbol_id: 0x906c5f61
   symbol_id: 0xf40e82dd
   symbol_id: 0x9b29f9ed
+  symbol_id: 0x5f3882d0
   symbol_id: 0xe203e72f
   symbol_id: 0xac8d7ab3
   symbol_id: 0x2f159216
