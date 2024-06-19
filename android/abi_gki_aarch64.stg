@@ -331891,6 +331891,14 @@ function {
   parameter_id: 0x11cfee5a
 }
 function {
+  id: 0x9a2abc7b
+  return_type_id: 0x6720d32f
+  parameter_id: 0x18bd6530
+  parameter_id: 0x6720d32f
+  parameter_id: 0x6720d32f
+  parameter_id: 0x13580d6c
+}
+function {
   id: 0x9a2af11b
   return_type_id: 0x6720d32f
   parameter_id: 0x18bd6530
@@ -354498,6 +354506,15 @@ elf_symbol {
   full_name: "__traceiter_android_vh_dup_task_struct"
 }
 elf_symbol {
+  id: 0xdcaa59a3
+  name: "__traceiter_android_vh_enable_thermal_genl_check"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xc39a1e16
+  type_id: 0x9a2abc7b
+  full_name: "__traceiter_android_vh_enable_thermal_genl_check"
+}
+elf_symbol {
   id: 0x1921d10d
   name: "__traceiter_android_vh_exit_check"
   is_defined: true
@@ -358951,6 +358968,15 @@ elf_symbol {
   crc: 0xdbee452c
   type_id: 0x18ccbd2c
   full_name: "__tracepoint_android_vh_dup_task_struct"
+}
+elf_symbol {
+  id: 0x54b2cd01
+  name: "__tracepoint_android_vh_enable_thermal_genl_check"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0x114ea210
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_enable_thermal_genl_check"
 }
 elf_symbol {
   id: 0x684e5f4f
@@ -418298,6 +418324,7 @@ interface {
   symbol_id: 0xf80eb64b
   symbol_id: 0x42312ccc
   symbol_id: 0xf432d1c9
+  symbol_id: 0xdcaa59a3
   symbol_id: 0x1921d10d
   symbol_id: 0xb38eccdd
   symbol_id: 0x1f554c2a
@@ -418793,6 +418820,7 @@ interface {
   symbol_id: 0x8405c9a1
   symbol_id: 0x988719fa
   symbol_id: 0x732a182b
+  symbol_id: 0x54b2cd01
   symbol_id: 0x684e5f4f
   symbol_id: 0xac5d150b
   symbol_id: 0x0d418d38
