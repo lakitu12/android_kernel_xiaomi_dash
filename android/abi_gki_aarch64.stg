@@ -6179,6 +6179,11 @@ pointer_reference {
   pointee_type_id: 0x125ed5d0
 }
 pointer_reference {
+  id: 0x0e09ca68
+  kind: POINTER
+  pointee_type_id: 0x1267cf3e
+}
+pointer_reference {
   id: 0x0e09e4c0
   kind: POINTER
   pointee_type_id: 0x1267759f
@@ -42711,6 +42716,10 @@ member {
   type_id: 0x14b5803d
 }
 member {
+  id: 0x27000c61
+  type_id: 0x132e4197
+}
+member {
   id: 0x27031642
   type_id: 0x13222919
 }
@@ -43109,6 +43118,11 @@ member {
   id: 0x30a73d6c
   type_id: 0x4db29c07
   offset: 3584
+}
+member {
+  id: 0x30a9cfe3
+  type_id: 0x4d8966b5
+  offset: 3456
 }
 member {
   id: 0x30c18aff
@@ -43874,6 +43888,10 @@ member {
   id: 0x36752018
   type_id: 0x56faddc1
   offset: 840
+}
+member {
+  id: 0x36752b74
+  type_id: 0x56faddc1
 }
 member {
   id: 0x3697c72f
@@ -115163,6 +115181,11 @@ member {
   name: "iommu_donate_pages_atomic"
   type_id: 0x1da052fb
   offset: 3200
+}
+member {
+  id: 0x6de9dba8
+  name: "iommu_flush_unmap_cache"
+  type_id: 0x0e09ca68
 }
 member {
   id: 0x22809337
@@ -218090,6 +218113,14 @@ struct_union {
   }
 }
 struct_union {
+  id: 0x132e4197
+  kind: STRUCT
+  definition {
+    bytesize: 8
+    member_id: 0x2d081532
+  }
+}
+struct_union {
   id: 0x132f610b
   kind: STRUCT
   definition {
@@ -221909,6 +221940,16 @@ struct_union {
     bytesize: 8
     member_id: 0x6e4d805e
     member_id: 0xd4146c29
+  }
+}
+struct_union {
+  id: 0x4d8966b5
+  kind: UNION
+  definition {
+    bytesize: 8
+    member_id: 0x6de9dba8
+    member_id: 0x27000c61
+    member_id: 0x36752b74
   }
 }
 struct_union {
@@ -259651,7 +259692,7 @@ struct_union {
     member_id: 0x9814688a
     member_id: 0x0e5ac226
     member_id: 0x0c6030af
-    member_id: 0x2d081f78
+    member_id: 0x30a9cfe3
     member_id: 0x637600aa
     member_id: 0xac894f3f
     member_id: 0xe0f63cd3
@@ -259745,7 +259786,7 @@ struct_union {
     member_id: 0x9814688a
     member_id: 0x0e5ac226
     member_id: 0x0c6030af
-    member_id: 0x2d081f78
+    member_id: 0x30a9cfe3
     member_id: 0x637600aa
     member_id: 0xac894f3f
     member_id: 0xe0f63cd3
@@ -304254,6 +304295,11 @@ function {
   id: 0x1267759f
   return_type_id: 0x48b5725f
   parameter_id: 0x0bfc9031
+}
+function {
+  id: 0x1267cf3e
+  return_type_id: 0x48b5725f
+  parameter_id: 0x0bfe7ab5
 }
 function {
   id: 0x12687d8c
