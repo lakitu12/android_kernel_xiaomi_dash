@@ -390020,6 +390020,15 @@ elf_symbol {
   full_name: "radix_tree_tagged"
 }
 elf_symbol {
+  id: 0xdd08aa2e
+  name: "raise_softirq"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xc7ea8a7a
+  type_id: 0x01f9081c
+  full_name: "raise_softirq"
+}
+elf_symbol {
   id: 0xbc5e2f91
   name: "rational_best_approximation"
   is_defined: true
@@ -415239,6 +415248,7 @@ interface {
   symbol_id: 0x23d99f29
   symbol_id: 0x69d73c4e
   symbol_id: 0x9653ad6f
+  symbol_id: 0xdd08aa2e
   symbol_id: 0xbc5e2f91
   symbol_id: 0x05375661
   symbol_id: 0x8e8693ec
