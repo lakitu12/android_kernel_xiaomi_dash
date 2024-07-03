@@ -323233,6 +323233,16 @@ function {
   parameter_id: 0x052fac00
 }
 function {
+  id: 0x9b30973c
+  return_type_id: 0x6720d32f
+  parameter_id: 0x18bd6530
+  parameter_id: 0x2170d06d
+  parameter_id: 0x6d7f5ff6
+  parameter_id: 0x6d7f5ff6
+  parameter_id: 0x11cfee5a
+  parameter_id: 0x11cfee5a
+}
+function {
   id: 0x9b30f926
   return_type_id: 0x6720d32f
   parameter_id: 0x18bd6530
@@ -325788,6 +325798,13 @@ function {
   parameter_id: 0x716d7970
 }
 function {
+  id: 0x9bc5dfda
+  return_type_id: 0x6720d32f
+  parameter_id: 0x18bd6530
+  parameter_id: 0x1b8590a8
+  parameter_id: 0x11cfee5a
+}
+function {
   id: 0x9bc64292
   return_type_id: 0x6720d32f
   parameter_id: 0x188b9e81
@@ -326966,6 +326983,13 @@ function {
   parameter_id: 0x1d19a9d5
   parameter_id: 0x92233392
   parameter_id: 0x92233392
+}
+function {
+  id: 0x9bfdc334
+  return_type_id: 0x6720d32f
+  parameter_id: 0x18bd6530
+  parameter_id: 0x1582ab06
+  parameter_id: 0x11cfee5a
 }
 function {
   id: 0x9bfe0b50
@@ -344217,6 +344241,24 @@ elf_symbol {
   full_name: "__traceiter_android_vh_gzvm_vcpu_exit_reason"
 }
 elf_symbol {
+  id: 0x2b3e4b23
+  name: "__traceiter_android_vh_inode_lru_isolate"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x9c12c9bd
+  type_id: 0x9bc5dfda
+  full_name: "__traceiter_android_vh_inode_lru_isolate"
+}
+elf_symbol {
+  id: 0x7cd03d83
+  name: "__traceiter_android_vh_invalidate_mapping_pagevec"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x4deeaa11
+  type_id: 0x9bfdc334
+  full_name: "__traceiter_android_vh_invalidate_mapping_pagevec"
+}
+elf_symbol {
   id: 0x4b67a5dc
   name: "__traceiter_android_vh_iommu_iovad_alloc_iova"
   is_defined: true
@@ -345268,6 +345310,15 @@ elf_symbol {
   crc: 0x01c84167
   type_id: 0x99c3be61
   full_name: "__traceiter_android_vh_show_suspend_epoch_val"
+}
+elf_symbol {
+  id: 0x21e28aab
+  name: "__traceiter_android_vh_shrink_folio_list"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xa6ddb414
+  type_id: 0x9b30973c
+  full_name: "__traceiter_android_vh_shrink_folio_list"
 }
 elf_symbol {
   id: 0xdfd06b97
@@ -348861,6 +348912,24 @@ elf_symbol {
   full_name: "__tracepoint_android_vh_gzvm_vcpu_exit_reason"
 }
 elf_symbol {
+  id: 0x52cc3d91
+  name: "__tracepoint_android_vh_inode_lru_isolate"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0xa2407b61
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_inode_lru_isolate"
+}
+elf_symbol {
+  id: 0xba330301
+  name: "__tracepoint_android_vh_invalidate_mapping_pagevec"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0x7b96fb5d
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_invalidate_mapping_pagevec"
+}
+elf_symbol {
   id: 0xbbfc3b7e
   name: "__tracepoint_android_vh_iommu_iovad_alloc_iova"
   is_defined: true
@@ -349912,6 +349981,15 @@ elf_symbol {
   crc: 0x754823e8
   type_id: 0x18ccbd2c
   full_name: "__tracepoint_android_vh_show_suspend_epoch_val"
+}
+elf_symbol {
+  id: 0xbd6dfce1
+  name: "__tracepoint_android_vh_shrink_folio_list"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0x5c62b3e4
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_shrink_folio_list"
 }
 elf_symbol {
   id: 0x3e70324d
@@ -408706,6 +408784,8 @@ interface {
   symbol_id: 0x9fe60f0c
   symbol_id: 0x83b45f32
   symbol_id: 0x47a1ebbd
+  symbol_id: 0x2b3e4b23
+  symbol_id: 0x7cd03d83
   symbol_id: 0x4b67a5dc
   symbol_id: 0x3684a257
   symbol_id: 0x7ee652cd
@@ -408823,6 +408903,7 @@ interface {
   symbol_id: 0x78accdce
   symbol_id: 0xd83423df
   symbol_id: 0x6d9f8b13
+  symbol_id: 0x21e28aab
   symbol_id: 0xdfd06b97
   symbol_id: 0x69c3749b
   symbol_id: 0x3d0fc76c
@@ -409222,6 +409303,8 @@ interface {
   symbol_id: 0x828646be
   symbol_id: 0x4756cfec
   symbol_id: 0x209f19bb
+  symbol_id: 0x52cc3d91
+  symbol_id: 0xba330301
   symbol_id: 0xbbfc3b7e
   symbol_id: 0xdb161c79
   symbol_id: 0x1d442b97
@@ -409339,6 +409422,7 @@ interface {
   symbol_id: 0x0a5014f0
   symbol_id: 0xc62d5cd5
   symbol_id: 0x8712dd01
+  symbol_id: 0xbd6dfce1
   symbol_id: 0x3e70324d
   symbol_id: 0xc8a7ac69
   symbol_id: 0x5ef059ce
