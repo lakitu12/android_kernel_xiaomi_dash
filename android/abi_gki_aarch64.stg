@@ -302437,6 +302437,11 @@ function {
   parameter_id: 0x040d1b01
 }
 function {
+  id: 0x1edae684
+  return_type_id: 0x48b5725f
+  parameter_id: 0x390adc5d
+}
+function {
   id: 0x1edcf3e9
   return_type_id: 0x48b5725f
   parameter_id: 0x391289e8
@@ -311078,6 +311083,14 @@ function {
   parameter_id: 0x038de60c
 }
 function {
+  id: 0x9116f146
+  return_type_id: 0x6720d32f
+  parameter_id: 0x3267a784
+  parameter_id: 0x0258f96e
+  parameter_id: 0x18bd6530
+  parameter_id: 0x2dcd339f
+}
+function {
   id: 0x911879fc
   return_type_id: 0x6720d32f
   parameter_id: 0x32ee063f
@@ -312004,6 +312017,13 @@ function {
   parameter_id: 0x1c3dbe5a
   parameter_id: 0x1c3dbe5a
   parameter_id: 0x1c3dbe5a
+}
+function {
+  id: 0x919cb2c5
+  return_type_id: 0x6720d32f
+  parameter_id: 0x33756485
+  parameter_id: 0x33756485
+  parameter_id: 0x33756485
 }
 function {
   id: 0x919e3b50
@@ -332797,6 +332817,12 @@ function {
   parameter_id: 0x4585663f
 }
 function {
+  id: 0x9ff7da86
+  return_type_id: 0x6720d32f
+  parameter_id: 0x0aa5309c
+  parameter_id: 0x379d63b0
+}
+function {
   id: 0x9ff86624
   return_type_id: 0x6720d32f
   parameter_id: 0x0ae4a2c7
@@ -340457,6 +340483,24 @@ elf_symbol {
   crc: 0xb5f464ad
   type_id: 0x915dba0e
   full_name: "__pkvm_register_el2_call"
+}
+elf_symbol {
+  id: 0xed5a2777
+  name: "__pkvm_topup_hyp_alloc"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xeaf03e15
+  type_id: 0x915dba0e
+  full_name: "__pkvm_topup_hyp_alloc"
+}
+elf_symbol {
+  id: 0xeef3c2cd
+  name: "__pkvm_topup_hyp_alloc_mgt"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x2607d7a6
+  type_id: 0x919cb2c5
+  full_name: "__pkvm_topup_hyp_alloc_mgt"
 }
 elf_symbol {
   id: 0x430bd907
@@ -362915,6 +362959,15 @@ elf_symbol {
   full_name: "driver_find_device"
 }
 elf_symbol {
+  id: 0x9b35e60f
+  name: "driver_for_each_device"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xbf636a2e
+  type_id: 0x9116f146
+  full_name: "driver_for_each_device"
+}
+elf_symbol {
   id: 0x1f0cd029
   name: "driver_register"
   is_defined: true
@@ -368642,6 +368695,15 @@ elf_symbol {
   namespace: "VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver"
   type_id: 0x1c4204ff
   full_name: "free_fs_struct"
+}
+elf_symbol {
+  id: 0xef2d8e08
+  name: "free_hyp_memcache"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x78fd6e24
+  type_id: 0x1edae684
+  full_name: "free_hyp_memcache"
 }
 elf_symbol {
   id: 0x9b815cdc
@@ -374384,6 +374446,15 @@ elf_symbol {
   crc: 0xdc32e98d
   type_id: 0x340d6f59
   full_name: "invalidate_mapping_pages"
+}
+elf_symbol {
+  id: 0x3052d5dd
+  name: "io_pgtable_configure"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x9d04371f
+  type_id: 0x9ff7da86
+  full_name: "io_pgtable_configure"
 }
 elf_symbol {
   id: 0x6f047c6e
@@ -386104,6 +386175,24 @@ elf_symbol {
   crc: 0x51fe2ffd
   type_id: 0x9cd82046
   full_name: "pktgen_xfrm_outer_mode_output"
+}
+elf_symbol {
+  id: 0x508c3717
+  name: "pkvm_iommu_resume"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xfaa5c82e
+  type_id: 0x9d16dd74
+  full_name: "pkvm_iommu_resume"
+}
+elf_symbol {
+  id: 0xe5abcddf
+  name: "pkvm_iommu_suspend"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xdaf6403e
+  type_id: 0x9d16dd74
+  full_name: "pkvm_iommu_suspend"
 }
 elf_symbol {
   id: 0xb30e2978
@@ -407755,6 +407844,8 @@ interface {
   symbol_id: 0x28bdd181
   symbol_id: 0xd9bec400
   symbol_id: 0xb35f76db
+  symbol_id: 0xed5a2777
+  symbol_id: 0xeef3c2cd
   symbol_id: 0x430bd907
   symbol_id: 0x535df772
   symbol_id: 0xafd4e12a
@@ -410247,6 +410338,7 @@ interface {
   symbol_id: 0x8fbdd27e
   symbol_id: 0xbde576b8
   symbol_id: 0xa6a7d8d9
+  symbol_id: 0x9b35e60f
   symbol_id: 0x1f0cd029
   symbol_id: 0xd90c83a1
   symbol_id: 0x5234324e
@@ -410883,6 +410975,7 @@ interface {
   symbol_id: 0x0513219e
   symbol_id: 0x1b00ff86
   symbol_id: 0xc8cad91b
+  symbol_id: 0xef2d8e08
   symbol_id: 0x9b815cdc
   symbol_id: 0x998ad938
   symbol_id: 0x27e49ce0
@@ -411518,6 +411611,7 @@ interface {
   symbol_id: 0x431bb67c
   symbol_id: 0x38472bf4
   symbol_id: 0xc3e2d4ae
+  symbol_id: 0x3052d5dd
   symbol_id: 0x6f047c6e
   symbol_id: 0xd67bf9ed
   symbol_id: 0x99deb62c
@@ -412818,6 +412912,8 @@ interface {
   symbol_id: 0x50cfaca0
   symbol_id: 0xf5634793
   symbol_id: 0xac156dd0
+  symbol_id: 0x508c3717
+  symbol_id: 0xe5abcddf
   symbol_id: 0xb30e2978
   symbol_id: 0x49cc7bc6
   symbol_id: 0x13a3a596
