@@ -415955,6 +415955,15 @@ elf_symbol {
   full_name: "vfs_getattr"
 }
 elf_symbol {
+  id: 0x3a06b46a
+  name: "vfs_getattr_nosec"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xe4d2dde8
+  type_id: 0x935e6464
+  full_name: "vfs_getattr_nosec"
+}
+elf_symbol {
   id: 0x720f61e1
   name: "vfs_iter_read"
   is_defined: true
@@ -425998,6 +426007,7 @@ interface {
   symbol_id: 0x39607d61
   symbol_id: 0x1499f6a1
   symbol_id: 0xfd383511
+  symbol_id: 0x3a06b46a
   symbol_id: 0x720f61e1
   symbol_id: 0x8c159c51
   symbol_id: 0xf89b49b7
