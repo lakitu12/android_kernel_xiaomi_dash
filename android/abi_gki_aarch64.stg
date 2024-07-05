@@ -394759,6 +394759,15 @@ elf_symbol {
   full_name: "snd_soc_card_get_kcontrol"
 }
 elf_symbol {
+  id: 0x64f9338f
+  name: "snd_soc_card_get_kcontrol_locked"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xf6058494
+  type_id: 0x2a7bc89a
+  full_name: "snd_soc_card_get_kcontrol_locked"
+}
+elf_symbol {
   id: 0x80680525
   name: "snd_soc_card_jack_new"
   is_defined: true
@@ -413883,6 +413892,7 @@ interface {
   symbol_id: 0x723461f4
   symbol_id: 0x59f15735
   symbol_id: 0x30c684dc
+  symbol_id: 0x64f9338f
   symbol_id: 0x80680525
   symbol_id: 0xf84e3b0d
   symbol_id: 0x1c40b8b7
