@@ -999,6 +999,11 @@ pointer_reference {
   pointee_type_id: 0x24d0f0fb
 }
 pointer_reference {
+  id: 0x03b207f4
+  kind: POINTER
+  pointee_type_id: 0x2488f94c
+}
+pointer_reference {
   id: 0x03c12fc3
   kind: POINTER
   pointee_type_id: 0x25445990
@@ -1817,6 +1822,11 @@ pointer_reference {
   id: 0x0672ef2a
   kind: POINTER
   pointee_type_id: 0x338b5a35
+}
+pointer_reference {
+  id: 0x067ed7b3
+  kind: POINTER
+  pointee_type_id: 0x33bbb851
 }
 pointer_reference {
   id: 0x06835e9c
@@ -24814,6 +24824,11 @@ pointer_reference {
   pointee_type_id: 0xe4a2bd4c
 }
 pointer_reference {
+  id: 0x33bbb851
+  kind: POINTER
+  pointee_type_id: 0xe4ae07d9
+}
+pointer_reference {
   id: 0x33bc0dab
   kind: POINTER
   pointee_type_id: 0xe4b0d031
@@ -28012,6 +28027,11 @@ pointer_reference {
   id: 0x3a232845
   kind: POINTER
   pointee_type_id: 0xc2cc478a
+}
+pointer_reference {
+  id: 0x3a2a183c
+  kind: POINTER
+  pointee_type_id: 0xc2e8866d
 }
 pointer_reference {
   id: 0x3a33db75
@@ -33087,6 +33107,11 @@ qualified {
   id: 0xc2747fdf
   qualifier: CONST
   qualified_type_id: 0x799649f7
+}
+qualified {
+  id: 0xc2e8866d
+  qualifier: CONST
+  qualified_type_id: 0x7be5af3f
 }
 qualified {
   id: 0xc3096dcf
@@ -68648,6 +68673,12 @@ member {
   offset: 256
 }
 member {
+  id: 0xac5e11ff
+  name: "cpu_iddq_value"
+  type_id: 0x6720d32f
+  offset: 128
+}
+member {
   id: 0xf19eb492
   name: "cpu_partial"
   type_id: 0x4585663f
@@ -68670,6 +68701,12 @@ member {
   name: "cpu_pmu_context"
   type_id: 0x1e866a82
   offset: 640
+}
+member {
+  id: 0x7be41b46
+  name: "cpu_process_id"
+  type_id: 0x6720d32f
+  offset: 32
 }
 member {
   id: 0x0d67a595
@@ -68711,6 +68748,18 @@ member {
   id: 0xc348a85a
   name: "cpu_slab"
   type_id: 0x017ab87c
+}
+member {
+  id: 0x9bd81e85
+  name: "cpu_speedo_id"
+  type_id: 0x6720d32f
+  offset: 64
+}
+member {
+  id: 0x93278a61
+  name: "cpu_speedo_value"
+  type_id: 0x6720d32f
+  offset: 96
 }
 member {
   id: 0x90ec0ff1
@@ -99363,6 +99412,24 @@ member {
   id: 0x2bc76984
   name: "gprs"
   type_id: 0x6fb0151f
+}
+member {
+  id: 0x8998723d
+  name: "gpu_process_id"
+  type_id: 0x6720d32f
+  offset: 256
+}
+member {
+  id: 0xc59015c8
+  name: "gpu_speedo_id"
+  type_id: 0x6720d32f
+  offset: 288
+}
+member {
+  id: 0x1839ab9c
+  name: "gpu_speedo_value"
+  type_id: 0x6720d32f
+  offset: 320
 }
 member {
   id: 0x220ee7b2
@@ -140250,10 +140317,22 @@ member {
   offset: 1472
 }
 member {
+  id: 0xd1b80326
+  name: "num_pd_names"
+  type_id: 0xee53e764
+  offset: 64
+}
+member {
   id: 0xa85e79f2
   name: "num_pdos"
   type_id: 0x6720d32f
   offset: 7296
+}
+member {
+  id: 0x8a72905a
+  name: "num_pds"
+  type_id: 0xc9082b19
+  offset: 128
 }
 member {
   id: 0x03585a0a
@@ -147913,6 +147992,17 @@ member {
   offset: 64
 }
 member {
+  id: 0x25af2c5a
+  name: "pd_devs"
+  type_id: 0x0a0607fc
+}
+member {
+  id: 0x4a811f20
+  name: "pd_flags"
+  type_id: 0xee53e764
+  offset: 96
+}
+member {
   id: 0x95657de9
   name: "pd_free_fn"
   type_id: 0x25c6650b
@@ -147934,6 +148024,17 @@ member {
   name: "pd_init_fn"
   type_id: 0x14ce1d40
   offset: 384
+}
+member {
+  id: 0xe9cae8df
+  name: "pd_links"
+  type_id: 0x03b207f4
+  offset: 64
+}
+member {
+  id: 0x54afd11c
+  name: "pd_names"
+  type_id: 0x3e75499e
 }
 member {
   id: 0x28d07615
@@ -150839,6 +150940,12 @@ member {
   name: "plat_device"
   type_id: 0x3f37d9d5
   offset: 3584
+}
+member {
+  id: 0x2bdf1e4c
+  name: "platform"
+  type_id: 0x4bb568ad
+  offset: 384
 }
 member {
   id: 0x38c654ae
@@ -168031,6 +168138,12 @@ member {
   offset: 12480
 }
 member {
+  id: 0x94eb2e6e
+  name: "revision"
+  type_id: 0x43f6ac22
+  offset: 352
+}
+member {
   id: 0xbcd2b2c4
   name: "revmap"
   type_id: 0xc6e69d29
@@ -180027,6 +180140,11 @@ member {
   type_id: 0xa7c362b0
 }
 member {
+  id: 0x159f315d
+  name: "sku_id"
+  type_id: 0x6720d32f
+}
+member {
   id: 0x0a7c1b9f
   name: "sl"
   type_id: 0xc9082b19
@@ -180844,6 +180962,24 @@ member {
   name: "soc_id"
   type_id: 0x3e10b518
   offset: 256
+}
+member {
+  id: 0x8d753502
+  name: "soc_process_id"
+  type_id: 0x6720d32f
+  offset: 160
+}
+member {
+  id: 0x509bfc34
+  name: "soc_speedo_id"
+  type_id: 0x6720d32f
+  offset: 192
+}
+member {
+  id: 0x0ef921fa
+  name: "soc_speedo_value"
+  type_id: 0x6720d32f
+  offset: 224
 }
 member {
   id: 0x7614ca61
@@ -225200,6 +225336,28 @@ struct_union {
   }
 }
 struct_union {
+  id: 0x7be5af3f
+  kind: STRUCT
+  name: "dev_pm_domain_attach_data"
+  definition {
+    bytesize: 16
+    member_id: 0x54afd11c
+    member_id: 0xd1b80326
+    member_id: 0x4a811f20
+  }
+}
+struct_union {
+  id: 0xe4ae07d9
+  kind: STRUCT
+  name: "dev_pm_domain_list"
+  definition {
+    bytesize: 24
+    member_id: 0x25af2c5a
+    member_id: 0xe9cae8df
+    member_id: 0x8a72905a
+  }
+}
+struct_union {
   id: 0x1976f438
   kind: STRUCT
   name: "dev_pm_info"
@@ -262764,6 +262922,27 @@ struct_union {
   }
 }
 struct_union {
+  id: 0x539be05c
+  kind: STRUCT
+  name: "tegra_sku_info"
+  definition {
+    bytesize: 52
+    member_id: 0x159f315d
+    member_id: 0x7be41b46
+    member_id: 0x9bd81e85
+    member_id: 0x93278a61
+    member_id: 0xac5e11ff
+    member_id: 0x8d753502
+    member_id: 0x509bfc34
+    member_id: 0x0ef921fa
+    member_id: 0x8998723d
+    member_id: 0xc59015c8
+    member_id: 0x1839ab9c
+    member_id: 0x94eb2e6e
+    member_id: 0x2bdf1e4c
+  }
+}
+struct_union {
   id: 0xe3c6d185
   kind: STRUCT
   name: "tegra_smmu"
@@ -289093,6 +289272,90 @@ enumeration {
   }
 }
 enumeration {
+  id: 0x4bb568ad
+  name: "tegra_platform"
+  definition {
+    underlying_type_id: 0x4585663f
+    enumerator {
+      name: "TEGRA_PLATFORM_SILICON"
+    }
+    enumerator {
+      name: "TEGRA_PLATFORM_QT"
+      value: 1
+    }
+    enumerator {
+      name: "TEGRA_PLATFORM_SYSTEM_FPGA"
+      value: 2
+    }
+    enumerator {
+      name: "TEGRA_PLATFORM_UNIT_FPGA"
+      value: 3
+    }
+    enumerator {
+      name: "TEGRA_PLATFORM_ASIM_QT"
+      value: 4
+    }
+    enumerator {
+      name: "TEGRA_PLATFORM_ASIM_LINSIM"
+      value: 5
+    }
+    enumerator {
+      name: "TEGRA_PLATFORM_DSIM_ASIM_LINSIM"
+      value: 6
+    }
+    enumerator {
+      name: "TEGRA_PLATFORM_VERIFICATION_SIMULATION"
+      value: 7
+    }
+    enumerator {
+      name: "TEGRA_PLATFORM_VDK"
+      value: 8
+    }
+    enumerator {
+      name: "TEGRA_PLATFORM_VSP"
+      value: 9
+    }
+    enumerator {
+      name: "TEGRA_PLATFORM_MAX"
+      value: 10
+    }
+  }
+}
+enumeration {
+  id: 0x43f6ac22
+  name: "tegra_revision"
+  definition {
+    underlying_type_id: 0x4585663f
+    enumerator {
+      name: "TEGRA_REVISION_UNKNOWN"
+    }
+    enumerator {
+      name: "TEGRA_REVISION_A01"
+      value: 1
+    }
+    enumerator {
+      name: "TEGRA_REVISION_A02"
+      value: 2
+    }
+    enumerator {
+      name: "TEGRA_REVISION_A03"
+      value: 3
+    }
+    enumerator {
+      name: "TEGRA_REVISION_A03p"
+      value: 4
+    }
+    enumerator {
+      name: "TEGRA_REVISION_A04"
+      value: 5
+    }
+    enumerator {
+      name: "TEGRA_REVISION_MAX"
+      value: 6
+    }
+  }
+}
+enumeration {
   id: 0x231fce4e
   name: "thermal_device_mode"
   definition {
@@ -300530,6 +300793,11 @@ function {
   parameter_id: 0x6d7f5ff6
   parameter_id: 0x6d7f5ff6
   parameter_id: 0x6d7f5ff6
+}
+function {
+  id: 0x1c76bf87
+  return_type_id: 0x48b5725f
+  parameter_id: 0x33bbb851
 }
 function {
   id: 0x1c78f81d
@@ -330313,6 +330581,13 @@ function {
   parameter_id: 0x33756485
 }
 function {
+  id: 0x9dffeaa1
+  return_type_id: 0x6720d32f
+  parameter_id: 0x0258f96e
+  parameter_id: 0x3a2a183c
+  parameter_id: 0x067ed7b3
+}
+function {
   id: 0x9e021d71
   return_type_id: 0x6720d32f
   parameter_id: 0x0d7ce7cc
@@ -355321,6 +355596,24 @@ elf_symbol {
   full_name: "clk_put"
 }
 elf_symbol {
+  id: 0xc84a28df
+  name: "clk_rate_exclusive_get"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x6257dda7
+  type_id: 0x9c978481
+  full_name: "clk_rate_exclusive_get"
+}
+elf_symbol {
+  id: 0xfb0bf054
+  name: "clk_rate_exclusive_put"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xacb4d88c
+  type_id: 0x118f363d
+  full_name: "clk_rate_exclusive_put"
+}
+elf_symbol {
   id: 0xbfeba170
   name: "clk_register"
   is_defined: true
@@ -358559,6 +358852,15 @@ elf_symbol {
   full_name: "dev_pm_domain_attach_by_name"
 }
 elf_symbol {
+  id: 0xdfeb23ad
+  name: "dev_pm_domain_attach_list"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x6b6c18f5
+  type_id: 0x9dffeaa1
+  full_name: "dev_pm_domain_attach_list"
+}
+elf_symbol {
   id: 0xe5fe5ba3
   name: "dev_pm_domain_detach"
   is_defined: true
@@ -358566,6 +358868,15 @@ elf_symbol {
   crc: 0xa6ad3e14
   type_id: 0x11bb92b7
   full_name: "dev_pm_domain_detach"
+}
+elf_symbol {
+  id: 0x924ff6bb
+  name: "dev_pm_domain_detach_list"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x5ca18480
+  type_id: 0x1c76bf87
+  full_name: "dev_pm_domain_detach_list"
 }
 elf_symbol {
   id: 0x6ef38ba9
@@ -398560,6 +398871,15 @@ elf_symbol {
   full_name: "tegra_mc_probe_device"
 }
 elf_symbol {
+  id: 0xcb1a674c
+  name: "tegra_sku_info"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0x7ea0d4ca
+  type_id: 0x539be05c
+  full_name: "tegra_sku_info"
+}
+elf_symbol {
   id: 0x7cfd9233
   name: "teo_cpu_get_util_threshold"
   is_defined: true
@@ -409623,6 +409943,8 @@ interface {
   symbol_id: 0x3452fd74
   symbol_id: 0x62ee7f8a
   symbol_id: 0x7d1f0700
+  symbol_id: 0xc84a28df
+  symbol_id: 0xfb0bf054
   symbol_id: 0xbfeba170
   symbol_id: 0x76cb6cc8
   symbol_id: 0x822d6c04
@@ -409982,7 +410304,9 @@ interface {
   symbol_id: 0xe27e32df
   symbol_id: 0xd5dbd4f5
   symbol_id: 0xad8f62c6
+  symbol_id: 0xdfeb23ad
   symbol_id: 0xe5fe5ba3
+  symbol_id: 0x924ff6bb
   symbol_id: 0x6ef38ba9
   symbol_id: 0xbd3b590c
   symbol_id: 0xa7986ac9
@@ -414418,6 +414742,7 @@ interface {
   symbol_id: 0x591431f1
   symbol_id: 0x6869c83d
   symbol_id: 0xa8f0fe44
+  symbol_id: 0xcb1a674c
   symbol_id: 0x7cfd9233
   symbol_id: 0xbd25c7d0
   symbol_id: 0x5bbd3545
