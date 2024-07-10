@@ -325295,6 +325295,18 @@ function {
   parameter_id: 0x4585663f
 }
 function {
+  id: 0x9b65d49e
+  return_type_id: 0x6720d32f
+  parameter_id: 0x18bd6530
+  parameter_id: 0x36f98e5c
+  parameter_id: 0x4585663f
+  parameter_id: 0x33756485
+  parameter_id: 0x92233392
+  parameter_id: 0x33756485
+  parameter_id: 0x33756485
+  parameter_id: 0x6720d32f
+}
+function {
   id: 0x9b65de16
   return_type_id: 0x6720d32f
   parameter_id: 0x17047654
@@ -344440,6 +344452,24 @@ elf_symbol {
   full_name: "__traceiter_android_vh_alloc_pages_slowpath"
 }
 elf_symbol {
+  id: 0xf3650061
+  name: "__traceiter_android_vh_alloc_pages_slowpath_end"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xf3ad466f
+  type_id: 0x9b65d49e
+  full_name: "__traceiter_android_vh_alloc_pages_slowpath_end"
+}
+elf_symbol {
+  id: 0x23d552d4
+  name: "__traceiter_android_vh_alloc_pages_slowpath_start"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x2665cc80
+  type_id: 0x9b17d9b6
+  full_name: "__traceiter_android_vh_alloc_pages_slowpath_start"
+}
+elf_symbol {
   id: 0x9c240ef1
   name: "__traceiter_android_vh_alloc_uid"
   is_defined: true
@@ -349190,6 +349220,24 @@ elf_symbol {
   crc: 0xc929cdef
   type_id: 0x18ccbd2c
   full_name: "__tracepoint_android_vh_alloc_pages_slowpath"
+}
+elf_symbol {
+  id: 0xff9480af
+  name: "__tracepoint_android_vh_alloc_pages_slowpath_end"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0xbeaf4af5
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_alloc_pages_slowpath_end"
+}
+elf_symbol {
+  id: 0xa47162fe
+  name: "__tracepoint_android_vh_alloc_pages_slowpath_start"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0xccb89288
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_alloc_pages_slowpath_start"
 }
 elf_symbol {
   id: 0xea695d5b
@@ -410299,6 +410347,8 @@ interface {
   symbol_id: 0x2e343246
   symbol_id: 0x1e05654f
   symbol_id: 0xa6e329cd
+  symbol_id: 0xf3650061
+  symbol_id: 0x23d552d4
   symbol_id: 0x9c240ef1
   symbol_id: 0x505f4289
   symbol_id: 0xd5431a65
@@ -410827,6 +410877,8 @@ interface {
   symbol_id: 0xfc735654
   symbol_id: 0x53b31a7d
   symbol_id: 0x1ebb872f
+  symbol_id: 0xff9480af
+  symbol_id: 0xa47162fe
   symbol_id: 0xea695d5b
   symbol_id: 0xd82141b7
   symbol_id: 0xe520cb67
