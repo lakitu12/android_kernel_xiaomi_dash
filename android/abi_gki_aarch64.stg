@@ -374449,6 +374449,15 @@ elf_symbol {
   full_name: "hwrng_unregister"
 }
 elf_symbol {
+  id: 0x4ad95269
+  name: "hwspin_lock_bust"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xe1297e84
+  type_id: 0x9e388824
+  full_name: "hwspin_lock_bust"
+}
+elf_symbol {
   id: 0x9a65c4be
   name: "hwspin_lock_free"
   is_defined: true
@@ -413911,6 +413920,7 @@ interface {
   symbol_id: 0xdd2248de
   symbol_id: 0x5af755ee
   symbol_id: 0xecce2e76
+  symbol_id: 0x4ad95269
   symbol_id: 0x9a65c4be
   symbol_id: 0xf9b62266
   symbol_id: 0xaa95b979
