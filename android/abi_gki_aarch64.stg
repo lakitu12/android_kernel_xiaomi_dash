@@ -371676,6 +371676,15 @@ elf_symbol {
   full_name: "drm_of_get_data_lanes_count_ep"
 }
 elf_symbol {
+  id: 0x1deac69a
+  name: "drm_of_lvds_get_data_mapping"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x8a198582
+  type_id: 0x910bc03d
+  full_name: "drm_of_lvds_get_data_mapping"
+}
+elf_symbol {
   id: 0xc73568f4
   name: "drm_of_lvds_get_dual_link_pixel_order"
   is_defined: true
@@ -416939,6 +416948,7 @@ interface {
   symbol_id: 0xd479c471
   symbol_id: 0x3a2aa84b
   symbol_id: 0x9c11760d
+  symbol_id: 0x1deac69a
   symbol_id: 0xc73568f4
   symbol_id: 0x124ae77d
   symbol_id: 0xdc6725cf
