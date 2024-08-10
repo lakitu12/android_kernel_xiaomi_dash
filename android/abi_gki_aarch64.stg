@@ -341473,6 +341473,11 @@ function {
   parameter_id: 0x4585663f
 }
 function {
+  id: 0xf03fb3d2
+  return_type_id: 0x2efe8065
+  parameter_id: 0xeb0f6de6
+}
+function {
   id: 0xf0447192
   return_type_id: 0x1b36c7a2
   parameter_id: 0x1d19a9d5
@@ -407028,6 +407033,15 @@ elf_symbol {
   full_name: "tty_chars_in_buffer"
 }
 elf_symbol {
+  id: 0xae3ac3f6
+  name: "tty_dev_name_to_number"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xb11d9000
+  type_id: 0x92c581e2
+  full_name: "tty_dev_name_to_number"
+}
+elf_symbol {
   id: 0xa7c71d5a
   name: "tty_driver_flush_buffer"
   is_defined: true
@@ -407089,6 +407103,24 @@ elf_symbol {
   crc: 0x4c94303a
   type_id: 0x1b27f18a
   full_name: "tty_hangup"
+}
+elf_symbol {
+  id: 0xdeb902aa
+  name: "tty_kclose"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xa58ccaaf
+  type_id: 0x1b27f18a
+  full_name: "tty_kclose"
+}
+elf_symbol {
+  id: 0x43145b7f
+  name: "tty_kopen_exclusive"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xbd134277
+  type_id: 0xf03fb3d2
+  full_name: "tty_kopen_exclusive"
 }
 elf_symbol {
   id: 0x30f9f63f
@@ -407271,6 +407303,15 @@ elf_symbol {
   full_name: "tty_register_ldisc"
 }
 elf_symbol {
+  id: 0xc2ec2319
+  name: "tty_set_ldisc"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x48aedf64
+  type_id: 0x97a3c07a
+  full_name: "tty_set_ldisc"
+}
+elf_symbol {
   id: 0xe9e8ea7d
   name: "tty_set_termios"
   is_defined: true
@@ -407332,6 +407373,15 @@ elf_symbol {
   crc: 0xcd9c13a3
   type_id: 0xf270347a
   full_name: "tty_termios_hw_change"
+}
+elf_symbol {
+  id: 0xfd34f897
+  name: "tty_unlock"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x9d1df065
+  type_id: 0x1b27f18a
+  full_name: "tty_unlock"
 }
 elf_symbol {
   id: 0x6eee841a
@@ -422251,6 +422301,7 @@ interface {
   symbol_id: 0x6c2259cd
   symbol_id: 0xacf009d6
   symbol_id: 0x0b4dd20d
+  symbol_id: 0xae3ac3f6
   symbol_id: 0xa7c71d5a
   symbol_id: 0x8ca570bf
   symbol_id: 0x64a32cf8
@@ -422258,6 +422309,8 @@ interface {
   symbol_id: 0x000b201f
   symbol_id: 0x0b032f8d
   symbol_id: 0xeafeba4a
+  symbol_id: 0xdeb902aa
+  symbol_id: 0x43145b7f
   symbol_id: 0x30f9f63f
   symbol_id: 0xd158764c
   symbol_id: 0xbf8f4498
@@ -422278,6 +422331,7 @@ interface {
   symbol_id: 0x1ebf9ca2
   symbol_id: 0x727ea003
   symbol_id: 0x2aefba25
+  symbol_id: 0xc2ec2319
   symbol_id: 0xe9e8ea7d
   symbol_id: 0x8728e6bf
   symbol_id: 0x3e022cbe
@@ -422285,6 +422339,7 @@ interface {
   symbol_id: 0x66974d1b
   symbol_id: 0x4cc18d95
   symbol_id: 0xacb09a3e
+  symbol_id: 0xfd34f897
   symbol_id: 0x6eee841a
   symbol_id: 0x0c2de3ab
   symbol_id: 0xaf7b86f3
