@@ -330416,6 +330416,13 @@ function {
   parameter_id: 0x18bd6530
 }
 function {
+  id: 0x9bc1f57d
+  return_type_id: 0x6720d32f
+  parameter_id: 0x18bd6530
+  parameter_id: 0x1d44326e
+  parameter_id: 0x6d7f5ff6
+}
+function {
   id: 0x9bc214f0
   return_type_id: 0x6720d32f
   parameter_id: 0x18bd6530
@@ -349475,6 +349482,15 @@ elf_symbol {
   full_name: "__traceiter_android_vh_handle_trylock_failed_folio"
 }
 elf_symbol {
+  id: 0x2e323991
+  name: "__traceiter_android_vh_inet_create"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xcf197007
+  type_id: 0x9bc1f57d
+  full_name: "__traceiter_android_vh_inet_create"
+}
+elf_symbol {
   id: 0x3d32611b
   name: "__traceiter_android_vh_inet_csk_clone_lock"
   is_defined: true
@@ -350771,6 +350787,15 @@ elf_symbol {
   full_name: "__traceiter_android_vh_smaps_swap_shared"
 }
 elf_symbol {
+  id: 0x57cb67b6
+  name: "__traceiter_android_vh_sock_create"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0xbe325f01
+  type_id: 0x9bdaaaaa
+  full_name: "__traceiter_android_vh_sock_create"
+}
+elf_symbol {
   id: 0x7068c1fb
   name: "__traceiter_android_vh_split_large_folio_bypass"
   is_defined: true
@@ -351273,6 +351298,15 @@ elf_symbol {
   crc: 0x00b2c5d5
   type_id: 0x9b87f766
   full_name: "__traceiter_android_vh_update_vma_flags"
+}
+elf_symbol {
+  id: 0xc2a5e712
+  name: "__traceiter_android_vh_uplink_send_msg"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x97e8fb9c
+  type_id: 0x9bdaaaaa
+  full_name: "__traceiter_android_vh_uplink_send_msg"
 }
 elf_symbol {
   id: 0x0266a7bc
@@ -354794,6 +354828,15 @@ elf_symbol {
   full_name: "__tracepoint_android_vh_handle_trylock_failed_folio"
 }
 elf_symbol {
+  id: 0xee2c17ff
+  name: "__tracepoint_android_vh_inet_create"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0xb2074568
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_inet_create"
+}
+elf_symbol {
   id: 0xdab6baf5
   name: "__tracepoint_android_vh_inet_csk_clone_lock"
   is_defined: true
@@ -356090,6 +356133,15 @@ elf_symbol {
   full_name: "__tracepoint_android_vh_smaps_swap_shared"
 }
 elf_symbol {
+  id: 0xb11763a0
+  name: "__tracepoint_android_vh_sock_create"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0xa07293cf
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_sock_create"
+}
+elf_symbol {
   id: 0x02bb68bd
   name: "__tracepoint_android_vh_split_large_folio_bypass"
   is_defined: true
@@ -356592,6 +356644,15 @@ elf_symbol {
   crc: 0xe977b1ee
   type_id: 0x18ccbd2c
   full_name: "__tracepoint_android_vh_update_vma_flags"
+}
+elf_symbol {
+  id: 0x56b11d7c
+  name: "__tracepoint_android_vh_uplink_send_msg"
+  is_defined: true
+  symbol_type: OBJECT
+  crc: 0xa1936286
+  type_id: 0x18ccbd2c
+  full_name: "__tracepoint_android_vh_uplink_send_msg"
 }
 elf_symbol {
   id: 0x7d0336a2
@@ -416142,6 +416203,7 @@ interface {
   symbol_id: 0x83b45f32
   symbol_id: 0x47a1ebbd
   symbol_id: 0x2b2d07aa
+  symbol_id: 0x2e323991
   symbol_id: 0x3d32611b
   symbol_id: 0x2b3e4b23
   symbol_id: 0x7cd03d83
@@ -416286,6 +416348,7 @@ interface {
   symbol_id: 0xcc89dffc
   symbol_id: 0x08f4cbb0
   symbol_id: 0xa082ad86
+  symbol_id: 0x57cb67b6
   symbol_id: 0x7068c1fb
   symbol_id: 0x445e3749
   symbol_id: 0x3f14ea30
@@ -416342,6 +416405,7 @@ interface {
   symbol_id: 0xff3c2c62
   symbol_id: 0x6a8145ff
   symbol_id: 0xf12d501f
+  symbol_id: 0xc2a5e712
   symbol_id: 0x0266a7bc
   symbol_id: 0xd0e4682b
   symbol_id: 0x08824ed3
@@ -416733,6 +416797,7 @@ interface {
   symbol_id: 0x4756cfec
   symbol_id: 0x209f19bb
   symbol_id: 0x90e3616c
+  symbol_id: 0xee2c17ff
   symbol_id: 0xdab6baf5
   symbol_id: 0x52cc3d91
   symbol_id: 0xba330301
@@ -416877,6 +416942,7 @@ interface {
   symbol_id: 0xab9ebde6
   symbol_id: 0x547e3912
   symbol_id: 0x227ce62c
+  symbol_id: 0xb11763a0
   symbol_id: 0x02bb68bd
   symbol_id: 0x052557d7
   symbol_id: 0x6fb8113a
@@ -416933,6 +416999,7 @@ interface {
   symbol_id: 0xab2bf68c
   symbol_id: 0xc09d36c9
   symbol_id: 0xeeeac09d
+  symbol_id: 0x56b11d7c
   symbol_id: 0x7d0336a2
   symbol_id: 0x990b2371
   symbol_id: 0xe100c3ad
