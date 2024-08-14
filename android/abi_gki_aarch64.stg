@@ -301602,6 +301602,11 @@ function {
   parameter_id: 0x4585663f
 }
 function {
+  id: 0x1700e5ae
+  return_type_id: 0x48b5725f
+  parameter_id: 0x1e62d0f5
+}
+function {
   id: 0x170370af
   return_type_id: 0x38040a6c
   parameter_id: 0x21069feb
@@ -410970,6 +410975,15 @@ elf_symbol {
   full_name: "utf8s_to_utf16s"
 }
 elf_symbol {
+  id: 0xb0c1eaf9
+  name: "uuid_gen"
+  is_defined: true
+  symbol_type: FUNCTION
+  crc: 0x69e683de
+  type_id: 0x1700e5ae
+  full_name: "uuid_gen"
+}
+elf_symbol {
   id: 0xe7b3f166
   name: "uuid_null"
   is_defined: true
@@ -422870,6 +422884,7 @@ interface {
   symbol_id: 0xa459c02b
   symbol_id: 0x4b0dcba7
   symbol_id: 0xa040d5a9
+  symbol_id: 0xb0c1eaf9
   symbol_id: 0xe7b3f166
   symbol_id: 0xb21b47da
   symbol_id: 0x4e2f55da
