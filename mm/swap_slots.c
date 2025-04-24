@@ -34,7 +34,6 @@
 #include <linux/vmalloc.h>
 #include <linux/mutex.h>
 #include <linux/mm.h>
-#include <trace/hooks/mm.h>
 
 static DEFINE_PER_CPU(struct swap_slots_cache, swp_slots);
 static bool	swap_slot_cache_active;
@@ -265,7 +264,7 @@ static int refill_swap_slots_cache(struct swap_slots_cache *cache)
 	cache->cur = 0;
 	if (swap_slot_cache_active)
 		cache->nr = get_swap_pages(SWAP_SLOTS_CACHE_SIZE,
-					   cache->slots, 0);
+					   cache->slots, 1);
 
 	return cache->nr;
 }
@@ -275,7 +274,6 @@ void free_swap_slot(swp_entry_t entry)
 	struct swap_slots_cache *cache;
 
 	cache = raw_cpu_ptr(&swp_slots);
-	trace_android_vh_alloc_swap_slot_cache(cache);
 	if (likely(use_swap_slot_cache && cache->slots_ret)) {
 		spin_lock_irq(&cache->free_lock);
 		/* Swap slots cache may be deactivated before acquiring lock */
@@ -309,8 +307,8 @@ swp_entry_t folio_alloc_swap(struct folio *folio)
 	entry.val = 0;
 
 	if (folio_test_large(folio)) {
-		if (IS_ENABLED(CONFIG_THP_SWAP))
-			get_swap_pages(1, &entry, folio_order(folio));
+		if (IS_ENABLED(CONFIG_THP_SWAP) && arch_thp_swp_supported())
+			get_swap_pages(1, &entry, folio_nr_pages(folio));
 		goto out;
 	}
 
@@ -342,7 +340,7 @@ repeat:
 			goto out;
 	}
 
-	get_swap_pages(1, &entry, 0);
+	get_swap_pages(1, &entry, 1);
 out:
 	if (mem_cgroup_try_charge_swap(folio, entry)) {
 		put_swap_folio(folio, entry);

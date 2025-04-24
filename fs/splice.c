@@ -772,7 +772,7 @@ done:
 	return ret;
 }
 
-EXPORT_SYMBOL_NS(iter_file_splice_write, ANDROID_GKI_VFS_EXPORT_ONLY);
+EXPORT_SYMBOL(iter_file_splice_write);
 
 #ifdef CONFIG_NET
 /**

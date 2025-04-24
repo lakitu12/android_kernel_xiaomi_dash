@@ -45,7 +45,6 @@
 #include <trace/events/block.h>
 
 #include "blk.h"
-#include "blk-mq-debugfs.h"
 #include "blk-mq-sched.h"
 #include "blk-pm.h"
 #include "blk-cgroup.h"
@@ -60,12 +59,6 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(block_bio_complete);
 EXPORT_TRACEPOINT_SYMBOL_GPL(block_split);
 EXPORT_TRACEPOINT_SYMBOL_GPL(block_unplug);
 EXPORT_TRACEPOINT_SYMBOL_GPL(block_rq_insert);
-EXPORT_TRACEPOINT_SYMBOL_GPL(block_bio_queue);
-EXPORT_TRACEPOINT_SYMBOL_GPL(block_getrq);
-EXPORT_TRACEPOINT_SYMBOL_GPL(block_rq_issue);
-EXPORT_TRACEPOINT_SYMBOL_GPL(block_rq_merge);
-EXPORT_TRACEPOINT_SYMBOL_GPL(block_rq_requeue);
-EXPORT_TRACEPOINT_SYMBOL_GPL(block_rq_complete);
 
 static DEFINE_IDA(blk_queue_ida);
 
@@ -276,7 +269,6 @@ static void blk_free_queue_rcu(struct rcu_head *rcu_head)
 static void blk_free_queue(struct request_queue *q)
 {
 	blk_free_queue_stats(q->stats);
-	blk_disable_sub_page_limits(&q->limits);
 	if (queue_is_mq(q))
 		blk_mq_release(q);
 
@@ -611,13 +603,8 @@ static inline blk_status_t blk_check_zone_append(struct request_queue *q,
 
 static void __submit_bio(struct bio *bio)
 {
-	/* If plug is not used, add new plug here to cache nsecs time. */
-	struct blk_plug plug;
-
 	if (unlikely(!blk_crypto_bio_prep(&bio)))
 		return;
-
-	blk_start_plug(&plug);
 
 	if (!bio->bi_bdev->bd_has_submit_bio) {
 		blk_mq_submit_bio(bio);
@@ -627,8 +614,6 @@ static void __submit_bio(struct bio *bio)
 		disk->fops->submit_bio(bio);
 		blk_queue_exit(disk->queue);
 	}
-
-	blk_finish_plug(&plug);
 }
 
 /*
@@ -835,36 +820,8 @@ end_io:
 }
 EXPORT_SYMBOL(submit_bio_noacct);
 
-#ifdef CONFIG_BLK_DEV_ZONED
-/**
- * blk_bio_is_seq_zoned_write() - Check if @bio requires write serialization.
- * @bio: Bio to examine.
- *
- * Note: REQ_OP_ZONE_APPEND bios do not require serialization.
- */
-static bool blk_bio_is_seq_zoned_write(struct bio *bio)
-{
-	return disk_zone_is_seq(bio->bi_bdev->bd_disk,
-				bio->bi_iter.bi_sector) &&
-	       op_needs_zoned_write_locking(bio_op(bio));
-}
-#else
-static bool blk_bio_is_seq_zoned_write(struct bio *bio)
-{
-	return false;
-}
-#endif
-
 static void bio_set_ioprio(struct bio *bio)
 {
-	/*
-	 * Do not set the I/O priority of sequential zoned write bios because
-	 * this could lead to reordering by the mq-deadline I/O scheduler and
-	 * hence to unaligned write errors.
-	 */
-	if (blk_bio_is_seq_zoned_write(bio))
-		return;
-
 	/* Nobody set ioprio so far? Initialize it based on task's nice value */
 	if (IOPRIO_PRIO_CLASS(bio->bi_ioprio) == IOPRIO_CLASS_NONE)
 		bio->bi_ioprio = get_current_ioprio();
@@ -1263,7 +1220,6 @@ int __init blk_dev_init(void)
 			sizeof(struct request_queue), 0, SLAB_PANIC, NULL);
 
 	blk_debugfs_root = debugfs_create_dir("block", NULL);
-	blk_mq_debugfs_init();
 
 	return 0;
 }

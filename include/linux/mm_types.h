@@ -19,7 +19,6 @@
 #include <linux/workqueue.h>
 #include <linux/seqlock.h>
 #include <linux/percpu_counter.h>
-#include <linux/android_kabi.h>
 
 #include <asm/mmu.h>
 
@@ -222,8 +221,8 @@ struct page {
  *
  * An 'encoded_page' pointer is a pointer to a regular 'struct page', but
  * with the low bits of the pointer indicating extra context-dependent
- * information. Only used in mmu_gather handling, and this acts as a type
- * system check on that use.
+ * information. Not super-common, but happens in mmu_gather and mlock
+ * handling, and this acts as a type system check on that use.
  *
  * We only really have two guaranteed bits in general, although you could
  * play with 'struct page' alignment (see CONFIG_HAVE_ALIGNED_STRUCT_PAGE)
@@ -232,46 +231,21 @@ struct page {
  * Use the supplied helper functions to endcode/decode the pointer and bits.
  */
 struct encoded_page;
-
-#define ENCODED_PAGE_BITS			3ul
-
-/* Perform rmap removal after we have flushed the TLB. */
-#define ENCODED_PAGE_BIT_DELAY_RMAP		1ul
-
-/*
- * The next item in an encoded_page array is the "nr_pages" argument, specifying
- * the number of consecutive pages starting from this page, that all belong to
- * the same folio. For example, "nr_pages" corresponds to the number of folio
- * references that must be dropped. If this bit is not set, "nr_pages" is
- * implicitly 1.
- */
-#define ENCODED_PAGE_BIT_NR_PAGES_NEXT		2ul
-
+#define ENCODE_PAGE_BITS 3ul
 static __always_inline struct encoded_page *encode_page(struct page *page, unsigned long flags)
 {
-	BUILD_BUG_ON(flags > ENCODED_PAGE_BITS);
+	BUILD_BUG_ON(flags > ENCODE_PAGE_BITS);
 	return (struct encoded_page *)(flags | (unsigned long)page);
 }
 
 static inline unsigned long encoded_page_flags(struct encoded_page *page)
 {
-	return ENCODED_PAGE_BITS & (unsigned long)page;
+	return ENCODE_PAGE_BITS & (unsigned long)page;
 }
 
 static inline struct page *encoded_page_ptr(struct encoded_page *page)
 {
-	return (struct page *)(~ENCODED_PAGE_BITS & (unsigned long)page);
-}
-
-static __always_inline struct encoded_page *encode_nr_pages(unsigned long nr)
-{
-	VM_WARN_ON_ONCE((nr << 2) >> 2 != nr);
-	return (struct encoded_page *)(nr << 2);
-}
-
-static __always_inline unsigned long encoded_nr_pages(struct encoded_page *page)
-{
-	return ((unsigned long)page) >> 2;
+	return (struct page *)(~ENCODE_PAGE_BITS & (unsigned long)page);
 }
 
 /*
@@ -352,19 +326,14 @@ struct folio {
 		struct {
 			unsigned long _flags_1;
 			unsigned long _head_1;
+			unsigned long _folio_avail;
 	/* public: */
 			atomic_t _entire_mapcount;
 			atomic_t _nr_pages_mapped;
 			atomic_t _pincount;
 #ifdef CONFIG_64BIT
-			unsigned int __padding;
 			unsigned int _folio_nr_pages;
 #endif
-			union {
-				unsigned long _private_1;
-				unsigned long *_dst_ul;
-				struct page **_dst_pp;
-			};
 	/* private: the union with struct page is transitional */
 		};
 		struct page __page_1;
@@ -410,7 +379,6 @@ FOLIO_MATCH(memcg_data, memcg_data);
 			offsetof(struct page, pg) + sizeof(struct page))
 FOLIO_MATCH(flags, _flags_1);
 FOLIO_MATCH(compound_head, _head_1);
-FOLIO_MATCH(private, _private_1);
 #undef FOLIO_MATCH
 #define FOLIO_MATCH(pg, fl)						\
 	static_assert(offsetof(struct folio, fl) ==			\
@@ -546,7 +514,10 @@ static inline void ptdesc_pmd_pts_init(struct ptdesc *ptdesc)
  */
 #define page_private(page)		((page)->private)
 
-void set_page_private(struct page *page, unsigned long private);
+static inline void set_page_private(struct page *page, unsigned long private)
+{
+	page->private = private;
+}
 
 static inline void *folio_get_private(struct folio *folio)
 {
@@ -678,9 +649,6 @@ struct vm_area_struct {
 	};
 
 #ifdef CONFIG_PER_VMA_LOCK
-	/* Flag to indicate areas detached from the mm->mm_mt tree */
-	bool detached;
-
 	/*
 	 * Can only be written (using WRITE_ONCE()) while holding both:
 	 *  - mmap_lock (in write mode)
@@ -697,6 +665,9 @@ struct vm_area_struct {
 	 */
 	int vm_lock_seq;
 	struct vma_lock *vm_lock;
+
+	/* Flag to indicate areas detached from the mm->mm_mt tree */
+	bool detached;
 #endif
 
 	/*
@@ -749,11 +720,6 @@ struct vm_area_struct {
 	struct vma_numab_state *numab_state;	/* NUMA Balancing state */
 #endif
 	struct vm_userfaultfd_ctx vm_userfaultfd_ctx;
-
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
 } __randomize_layout;
 
 #ifdef CONFIG_SCHED_MM_CID
@@ -1011,9 +977,6 @@ struct mm_struct {
 #endif
 		} lru_gen;
 #endif /* CONFIG_LRU_GEN */
-
-		ANDROID_KABI_RESERVE(1);
-		ANDROID_BACKPORT_RESERVE(1);
 	} __randomize_layout;
 
 	/*
@@ -1376,15 +1339,6 @@ enum fault_flag {
 };
 
 typedef unsigned int __bitwise zap_flags_t;
-
-/* Flags for clear_young_dirty_ptes(). */
-typedef int __bitwise cydp_t;
-
-/* Clear the access bit */
-#define CYDP_CLEAR_YOUNG		((__force cydp_t)BIT(0))
-
-/* Clear the dirty bit */
-#define CYDP_CLEAR_DIRTY		((__force cydp_t)BIT(1))
 
 /*
  * FOLL_PIN and FOLL_LONGTERM may be used in various combinations with each

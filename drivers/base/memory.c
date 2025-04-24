@@ -390,9 +390,6 @@ static ssize_t state_store(struct device *dev, struct device_attribute *attr,
 	if (ret)
 		return -EINVAL;
 
-	if (mem->online_type == MMOP_ONLINE_MOVABLE)
-		static_branch_enable(&movablecore_enabled);
-
 	return count;
 }
 

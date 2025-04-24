@@ -17,7 +17,6 @@
 #include <linux/sched.h>
 #include <linux/module.h>
 #include <trace/events/power.h>
-#include <trace/hooks/sched.h>
 
 #include <asm/irq_regs.h>
 
@@ -85,7 +84,7 @@ int tick_is_oneshot_available(void)
  */
 static void tick_periodic(int cpu)
 {
-	if (READ_ONCE(tick_do_timer_cpu) == cpu) {
+	if (tick_do_timer_cpu == cpu) {
 		raw_spin_lock(&jiffies_lock);
 		write_seqcount_begin(&jiffies_seq);
 
@@ -96,7 +95,6 @@ static void tick_periodic(int cpu)
 		write_seqcount_end(&jiffies_seq);
 		raw_spin_unlock(&jiffies_lock);
 		update_wall_time();
-		trace_android_vh_jiffies_update(NULL);
 	}
 
 	update_process_times(user_mode(get_irq_regs()));
@@ -199,8 +197,8 @@ static void tick_setup_device(struct tick_device *td,
 		 * If no cpu took the do_timer update, assign it to
 		 * this cpu:
 		 */
-		if (READ_ONCE(tick_do_timer_cpu) == TICK_DO_TIMER_BOOT) {
-			WRITE_ONCE(tick_do_timer_cpu, cpu);
+		if (tick_do_timer_cpu == TICK_DO_TIMER_BOOT) {
+			tick_do_timer_cpu = cpu;
 			tick_next_period = ktime_get();
 #ifdef CONFIG_NO_HZ_FULL
 			/*

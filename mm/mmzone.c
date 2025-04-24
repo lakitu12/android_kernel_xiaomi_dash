@@ -9,14 +9,6 @@
 #include <linux/stddef.h>
 #include <linux/mm.h>
 #include <linux/mmzone.h>
-#include <trace/hooks/mm.h>
-
-void set_page_private(struct page *page, unsigned long private)
-{
-	trace_android_vh_page_private_mod(page, private);
-	page->private = private;
-}
-EXPORT_SYMBOL_GPL(set_page_private);
 
 struct pglist_data *first_online_pgdat(void)
 {
@@ -118,10 +110,3 @@ int page_cpupid_xchg_last(struct page *page, int cpupid)
 	return last_cpupid;
 }
 #endif
-
-enum zone_type gfp_zone(gfp_t flags)
-{
-	trace_android_rvh_set_gfp_zone_flags(&flags);
-
-	return __gfp_zone(flags);
-}

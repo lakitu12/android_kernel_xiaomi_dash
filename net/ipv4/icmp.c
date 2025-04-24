@@ -95,9 +95,7 @@
 #include <net/addrconf.h>
 #include <net/inet_dscp.h>
 #define CREATE_TRACE_POINTS
-#ifndef __GENKSYMS__
 #include <trace/events/icmp.h>
-#endif
 
 /*
  *	Build xmit assembly blocks

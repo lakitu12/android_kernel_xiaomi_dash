@@ -90,7 +90,6 @@ static const char * const POWER_SUPPLY_CHARGE_TYPE_TEXT[] = {
 	[POWER_SUPPLY_CHARGE_TYPE_CUSTOM]	= "Custom",
 	[POWER_SUPPLY_CHARGE_TYPE_LONGLIFE]	= "Long Life",
 	[POWER_SUPPLY_CHARGE_TYPE_BYPASS]	= "Bypass",
-	[POWER_SUPPLY_CHARGE_TYPE_TAPER_EXT]	= "Taper",
 };
 
 static const char * const POWER_SUPPLY_HEALTH_TEXT[] = {

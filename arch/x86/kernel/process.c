@@ -4,7 +4,6 @@
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/mm.h>
-#include <linux/page_size_compat.h>
 #include <linux/smp.h>
 #include <linux/cpu.h>
 #include <linux/prctl.h>
@@ -1030,7 +1029,7 @@ early_param("idle", idle_setup);
 unsigned long arch_align_stack(unsigned long sp)
 {
 	if (!(current->personality & ADDR_NO_RANDOMIZE) && randomize_va_space)
-		sp -= get_random_u32_below(__PAGE_SIZE << 1);
+		sp -= get_random_u32_below(8192);
 	return sp & ~0xf;
 }
 

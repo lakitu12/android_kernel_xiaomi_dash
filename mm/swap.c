@@ -43,9 +43,6 @@
 #define CREATE_TRACE_POINTS
 #include <trace/events/pagemap.h>
 
-#undef CREATE_TRACE_POINTS
-#include <trace/hooks/mm.h>
-
 /* How many pages do we try to swap or page in/out together? As a power of 2 */
 int page_cluster;
 const int page_cluster_max = 31;
@@ -170,7 +167,7 @@ static void lru_add_fn(struct lruvec *lruvec, struct folio *folio)
 	 * while the LRU lock is held.
 	 *
 	 * (That is not true of __page_cache_release(), and not necessarily
-	 * true of folios_put(): but those only clear the mlocked flag after
+	 * true of release_pages(): but those only clear the mlocked flag after
 	 * folio_put_testzero() has excluded any other users of the folio.)
 	 */
 	if (folio_evictable(folio)) {
@@ -216,7 +213,8 @@ static void folio_batch_move_lru(struct folio_batch *fbatch, move_fn_t move_fn)
 
 	if (lruvec)
 		unlock_page_lruvec_irqrestore(lruvec, flags);
-	folios_put(fbatch);
+	folios_put(fbatch->folios, folio_batch_count(fbatch));
+	folio_batch_reinit(fbatch);
 }
 
 static void folio_batch_add_and_move(struct folio_batch *fbatch,
@@ -456,7 +454,6 @@ void folio_mark_accessed(struct folio *folio)
 		return;
 	}
 
-	trace_android_vh_mark_page_accessed(folio);
 	if (!folio_test_referenced(folio)) {
 		folio_set_referenced(folio);
 	} else if (folio_test_unevictable(folio)) {
@@ -503,13 +500,8 @@ void folio_add_lru(struct folio *folio)
 
 	/* see the comment in lru_gen_add_folio() */
 	if (lru_gen_enabled() && !folio_test_unevictable(folio) &&
-	    lru_gen_in_fault() && !(current->flags & PF_MEMALLOC)) {
-		bool bypass = false;
-
-		trace_android_vh_folio_add_lru_folio_activate(folio, &bypass);
-		if (!bypass)
-			folio_set_active(folio);
-	}
+	    lru_gen_in_fault() && !(current->flags & PF_MEMALLOC))
+		folio_set_active(folio);
 
 	folio_get(folio);
 	local_lock(&cpu_fbatches.lock);
@@ -620,7 +612,6 @@ static void lru_lazyfree_fn(struct lruvec *lruvec, struct folio *folio)
 	if (folio_test_anon(folio) && folio_test_swapbacked(folio) &&
 	    !folio_test_swapcache(folio) && !folio_test_unevictable(folio)) {
 		long nr_pages = folio_nr_pages(folio);
-		bool folio_added = false;
 
 		lruvec_del_folio(lruvec, folio);
 		folio_clear_active(folio);
@@ -631,9 +622,7 @@ static void lru_lazyfree_fn(struct lruvec *lruvec, struct folio *folio)
 		 * anonymous folios
 		 */
 		folio_clear_swapbacked(folio);
-		trace_android_vh_add_lazyfree_bypass(lruvec, folio, &folio_added);
-		if (!folio_added)
-			lruvec_add_folio(lruvec, folio);
+		lruvec_add_folio(lruvec, folio);
 
 		__count_vm_events(PGLAZYFREE, nr_pages);
 		__count_memcg_events(lruvec_memcg(lruvec), PGLAZYFREE,
@@ -915,7 +904,6 @@ void lru_add_drain_all(void)
 #endif /* CONFIG_SMP */
 
 atomic_t lru_disable_count = ATOMIC_INIT(0);
-EXPORT_SYMBOL_GPL(lru_disable_count);
 
 /*
  * lru_cache_disable() needs to be called before we start compiling
@@ -927,12 +915,7 @@ EXPORT_SYMBOL_GPL(lru_disable_count);
  */
 void lru_cache_disable(void)
 {
-	/*
-	 * If someone is already disabled lru_cache, just return with
-	 * increasing the lru_disable_count.
-	 */
-	if (atomic_inc_not_zero(&lru_disable_count))
-		return;
+	atomic_inc(&lru_disable_count);
 	/*
 	 * Readers of lru_disable_count are protected by either disabling
 	 * preemption or rcu_read_lock:
@@ -952,81 +935,7 @@ void lru_cache_disable(void)
 #else
 	lru_add_and_bh_lrus_drain();
 #endif
-	atomic_inc(&lru_disable_count);
 }
-EXPORT_SYMBOL_GPL(lru_cache_disable);
-
-/**
- * folios_put_refs - Reduce the reference count on a batch of folios.
- * @folios: The folios.
- * @refs: The number of refs to subtract from each folio.
- *
- * Like folio_put(), but for a batch of folios.  This is more efficient
- * than writing the loop yourself as it will optimise the locks which need
- * to be taken if the folios are freed.  The folios batch is returned
- * empty and ready to be reused for another batch; there is no need
- * to reinitialise it.  If @refs is NULL, we subtract one from each
- * folio refcount.
- *
- * Context: May be called in process or interrupt context, but not in NMI
- * context.  May be called while holding a spinlock.
- */
-void folios_put_refs(struct folio_batch *folios, unsigned int *refs)
-{
-	int i;
-	LIST_HEAD(pages_to_free);
-	struct lruvec *lruvec = NULL;
-	unsigned long flags = 0;
-
-	for (i = 0; i < folios->nr; i++) {
-		struct folio *folio = folios->folios[i];
-		unsigned int nr_refs = refs ? refs[i] : 1;
-
-		if (is_huge_zero_page(&folio->page))
-			continue;
-
-		if (folio_is_zone_device(folio)) {
-			if (lruvec) {
-				unlock_page_lruvec_irqrestore(lruvec, flags);
-				lruvec = NULL;
-			}
-			if (put_devmap_managed_page_refs(&folio->page, nr_refs))
-				continue;
-			if (folio_ref_sub_and_test(folio, nr_refs))
-				free_zone_device_page(&folio->page);
-			continue;
-		}
-
-		if (!folio_ref_sub_and_test(folio, nr_refs))
-			continue;
-
-		/* hugetlb has its own memcg */
-		if (folio_test_hugetlb(folio)) {
-			if (lruvec) {
-				unlock_page_lruvec_irqrestore(lruvec, flags);
-				lruvec = NULL;
-			}
-			free_huge_folio(folio);
-			continue;
-		}
-
-		if (folio_test_lru(folio)) {
-			lruvec = folio_lruvec_relock_irqsave(folio, lruvec,
-									&flags);
-			lruvec_del_folio(lruvec, folio);
-			__folio_clear_lru_flags(folio);
-		}
-
-		list_add(&folio->lru, &pages_to_free);
-	}
-	if (lruvec)
-		unlock_page_lruvec_irqrestore(lruvec, flags);
-
-	mem_cgroup_uncharge_list(&pages_to_free);
-	free_unref_page_list(&pages_to_free);
-	folio_batch_reinit(folios);
-}
-EXPORT_SYMBOL(folios_put_refs);
 
 /**
  * release_pages - batched put_page()
@@ -1042,29 +951,75 @@ EXPORT_SYMBOL(folios_put_refs);
  */
 void release_pages(release_pages_arg arg, int nr)
 {
-	struct folio_batch fbatch;
-	int refs[PAGEVEC_SIZE];
-	struct encoded_page **encoded = arg.encoded_pages;
 	int i;
+	struct encoded_page **encoded = arg.encoded_pages;
+	LIST_HEAD(pages_to_free);
+	struct lruvec *lruvec = NULL;
+	unsigned long flags = 0;
+	unsigned int lock_batch;
 
-	folio_batch_init(&fbatch);
 	for (i = 0; i < nr; i++) {
+		struct folio *folio;
+
 		/* Turn any of the argument types into a folio */
-		struct folio *folio = page_folio(encoded_page_ptr(encoded[i]));
+		folio = page_folio(encoded_page_ptr(encoded[i]));
 
-		/* Is our next entry actually "nr_pages" -> "nr_refs" ? */
-		refs[fbatch.nr] = 1;
-		if (unlikely(encoded_page_flags(encoded[i]) &
-			     ENCODED_PAGE_BIT_NR_PAGES_NEXT))
-			refs[fbatch.nr] = encoded_nr_pages(encoded[++i]);
+		/*
+		 * Make sure the IRQ-safe lock-holding time does not get
+		 * excessive with a continuous string of pages from the
+		 * same lruvec. The lock is held only if lruvec != NULL.
+		 */
+		if (lruvec && ++lock_batch == SWAP_CLUSTER_MAX) {
+			unlock_page_lruvec_irqrestore(lruvec, flags);
+			lruvec = NULL;
+		}
 
-		if (folio_batch_add(&fbatch, folio) > 0)
+		if (is_huge_zero_page(&folio->page))
 			continue;
-		folios_put_refs(&fbatch, refs);
-	}
 
-	if (fbatch.nr)
-		folios_put_refs(&fbatch, refs);
+		if (folio_is_zone_device(folio)) {
+			if (lruvec) {
+				unlock_page_lruvec_irqrestore(lruvec, flags);
+				lruvec = NULL;
+			}
+			if (put_devmap_managed_page(&folio->page))
+				continue;
+			if (folio_put_testzero(folio))
+				free_zone_device_page(&folio->page);
+			continue;
+		}
+
+		if (!folio_put_testzero(folio))
+			continue;
+
+		if (folio_test_large(folio)) {
+			if (lruvec) {
+				unlock_page_lruvec_irqrestore(lruvec, flags);
+				lruvec = NULL;
+			}
+			__folio_put_large(folio);
+			continue;
+		}
+
+		if (folio_test_lru(folio)) {
+			struct lruvec *prev_lruvec = lruvec;
+
+			lruvec = folio_lruvec_relock_irqsave(folio, lruvec,
+									&flags);
+			if (prev_lruvec != lruvec)
+				lock_batch = 0;
+
+			lruvec_del_folio(lruvec, folio);
+			__folio_clear_lru_flags(folio);
+		}
+
+		list_add(&folio->lru, &pages_to_free);
+	}
+	if (lruvec)
+		unlock_page_lruvec_irqrestore(lruvec, flags);
+
+	mem_cgroup_uncharge_list(&pages_to_free);
+	free_unref_page_list(&pages_to_free);
 }
 EXPORT_SYMBOL(release_pages);
 
@@ -1084,7 +1039,8 @@ void __folio_batch_release(struct folio_batch *fbatch)
 		lru_add_drain();
 		fbatch->percpu_pvec_drained = true;
 	}
-	folios_put(fbatch);
+	release_pages(fbatch->folios, folio_batch_count(fbatch));
+	folio_batch_reinit(fbatch);
 }
 EXPORT_SYMBOL(__folio_batch_release);
 

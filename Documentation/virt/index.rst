@@ -16,8 +16,6 @@ Virtualization Support
    coco/sev-guest
    coco/tdx-guest
    hyperv/index
-   geniezone/introduction
-   gunyah/index
 
 .. only:: html and subproject
 

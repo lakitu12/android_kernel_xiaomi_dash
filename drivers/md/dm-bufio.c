@@ -20,7 +20,6 @@
 #include <linux/rbtree.h>
 #include <linux/stacktrace.h>
 #include <linux/jump_label.h>
-#include <trace/hooks/mm.h>
 
 #include "dm.h"
 
@@ -68,8 +67,6 @@
 #define LIST_CLEAN	0
 #define LIST_DIRTY	1
 #define LIST_SIZE	2
-
-#define SCAN_RESCHED_CYCLE	16
 
 /*--------------------------------------------------------------*/
 
@@ -1295,8 +1292,7 @@ static void dmio_complete(unsigned long error, void *context)
 }
 
 static void use_dmio(struct dm_buffer *b, enum req_op op, sector_t sector,
-		     unsigned int n_sectors, unsigned int offset,
-		     unsigned short ioprio)
+		     unsigned int n_sectors, unsigned int offset)
 {
 	int r;
 	struct dm_io_request io_req = {
@@ -1319,7 +1315,7 @@ static void use_dmio(struct dm_buffer *b, enum req_op op, sector_t sector,
 		io_req.mem.ptr.vma = (char *)b->data + offset;
 	}
 
-	r = dm_io(&io_req, 1, &region, NULL, ioprio);
+	r = dm_io(&io_req, 1, &region, NULL, IOPRIO_DEFAULT);
 	if (unlikely(r))
 		b->end_io(b, errno_to_blk_status(r));
 }
@@ -1335,8 +1331,7 @@ static void bio_complete(struct bio *bio)
 }
 
 static void use_bio(struct dm_buffer *b, enum req_op op, sector_t sector,
-		    unsigned int n_sectors, unsigned int offset,
-		    unsigned short ioprio)
+		    unsigned int n_sectors, unsigned int offset)
 {
 	struct bio *bio;
 	char *ptr;
@@ -1344,14 +1339,13 @@ static void use_bio(struct dm_buffer *b, enum req_op op, sector_t sector,
 
 	bio = bio_kmalloc(1, GFP_NOWAIT | __GFP_NORETRY | __GFP_NOWARN);
 	if (!bio) {
-		use_dmio(b, op, sector, n_sectors, offset, ioprio);
+		use_dmio(b, op, sector, n_sectors, offset);
 		return;
 	}
 	bio_init(bio, b->c->bdev, bio->bi_inline_vecs, 1, op);
 	bio->bi_iter.bi_sector = sector;
 	bio->bi_end_io = bio_complete;
 	bio->bi_private = b;
-	bio->bi_ioprio = ioprio;
 
 	ptr = (char *)b->data + offset;
 	len = n_sectors << SECTOR_SHIFT;
@@ -1374,7 +1368,7 @@ static inline sector_t block_to_sector(struct dm_bufio_client *c, sector_t block
 	return sector;
 }
 
-static void submit_io(struct dm_buffer *b, enum req_op op, unsigned short ioprio,
+static void submit_io(struct dm_buffer *b, enum req_op op,
 		      void (*end_io)(struct dm_buffer *, blk_status_t))
 {
 	unsigned int n_sectors;
@@ -1404,9 +1398,9 @@ static void submit_io(struct dm_buffer *b, enum req_op op, unsigned short ioprio
 	}
 
 	if (b->data_mode != DATA_MODE_VMALLOC)
-		use_bio(b, op, sector, n_sectors, offset, ioprio);
+		use_bio(b, op, sector, n_sectors, offset);
 	else
-		use_dmio(b, op, sector, n_sectors, offset, ioprio);
+		use_dmio(b, op, sector, n_sectors, offset);
 }
 
 /*
@@ -1462,7 +1456,7 @@ static void __write_dirty_buffer(struct dm_buffer *b,
 	b->write_end = b->dirty_end;
 
 	if (!write_list)
-		submit_io(b, REQ_OP_WRITE, IOPRIO_DEFAULT, write_endio);
+		submit_io(b, REQ_OP_WRITE, write_endio);
 	else
 		list_add_tail(&b->write_list, write_list);
 }
@@ -1476,7 +1470,7 @@ static void __flush_write_list(struct list_head *write_list)
 		struct dm_buffer *b =
 			list_entry(write_list->next, struct dm_buffer, write_list);
 		list_del(&b->write_list);
-		submit_io(b, REQ_OP_WRITE, IOPRIO_DEFAULT, write_endio);
+		submit_io(b, REQ_OP_WRITE, write_endio);
 		cond_resched();
 	}
 	blk_finish_plug(&plug);
@@ -1858,8 +1852,7 @@ static void read_endio(struct dm_buffer *b, blk_status_t status)
  * and uses dm_bufio_mark_buffer_dirty to write new data back).
  */
 static void *new_read(struct dm_bufio_client *c, sector_t block,
-		      enum new_flag nf, struct dm_buffer **bp,
-		      unsigned short ioprio)
+		      enum new_flag nf, struct dm_buffer **bp)
 {
 	int need_submit = 0;
 	struct dm_buffer *b;
@@ -1912,7 +1905,7 @@ static void *new_read(struct dm_bufio_client *c, sector_t block,
 		return NULL;
 
 	if (need_submit)
-		submit_io(b, REQ_OP_READ, ioprio, read_endio);
+		submit_io(b, REQ_OP_READ, read_endio);
 
 	if (nf != NF_GET)	/* we already tested this condition above */
 		wait_on_bit_io(&b->state, B_READING, TASK_UNINTERRUPTIBLE);
@@ -1933,32 +1926,19 @@ static void *new_read(struct dm_bufio_client *c, sector_t block,
 void *dm_bufio_get(struct dm_bufio_client *c, sector_t block,
 		   struct dm_buffer **bp)
 {
-	return new_read(c, block, NF_GET, bp, IOPRIO_DEFAULT);
+	return new_read(c, block, NF_GET, bp);
 }
 EXPORT_SYMBOL_GPL(dm_bufio_get);
-
-static void *__dm_bufio_read(struct dm_bufio_client *c, sector_t block,
-			struct dm_buffer **bp, unsigned short ioprio)
-{
-	if (WARN_ON_ONCE(dm_bufio_in_request()))
-		return ERR_PTR(-EINVAL);
-
-	return new_read(c, block, NF_READ, bp, ioprio);
-}
 
 void *dm_bufio_read(struct dm_bufio_client *c, sector_t block,
 		    struct dm_buffer **bp)
 {
-	return __dm_bufio_read(c, block, bp, IOPRIO_DEFAULT);
+	if (WARN_ON_ONCE(dm_bufio_in_request()))
+		return ERR_PTR(-EINVAL);
+
+	return new_read(c, block, NF_READ, bp);
 }
 EXPORT_SYMBOL_GPL(dm_bufio_read);
-
-void *dm_bufio_read_with_ioprio(struct dm_bufio_client *c, sector_t block,
-				struct dm_buffer **bp, unsigned short ioprio)
-{
-	return __dm_bufio_read(c, block, bp, ioprio);
-}
-EXPORT_SYMBOL_GPL(dm_bufio_read_with_ioprio);
 
 void *dm_bufio_new(struct dm_bufio_client *c, sector_t block,
 		   struct dm_buffer **bp)
@@ -1966,13 +1946,12 @@ void *dm_bufio_new(struct dm_bufio_client *c, sector_t block,
 	if (WARN_ON_ONCE(dm_bufio_in_request()))
 		return ERR_PTR(-EINVAL);
 
-	return new_read(c, block, NF_FRESH, bp, IOPRIO_DEFAULT);
+	return new_read(c, block, NF_FRESH, bp);
 }
 EXPORT_SYMBOL_GPL(dm_bufio_new);
 
-static void __dm_bufio_prefetch(struct dm_bufio_client *c,
-			sector_t block, unsigned int n_blocks,
-			unsigned short ioprio)
+void dm_bufio_prefetch(struct dm_bufio_client *c,
+		       sector_t block, unsigned int n_blocks)
 {
 	struct blk_plug plug;
 
@@ -2008,7 +1987,7 @@ static void __dm_bufio_prefetch(struct dm_bufio_client *c,
 			dm_bufio_unlock(c);
 
 			if (need_submit)
-				submit_io(b, REQ_OP_READ, ioprio, read_endio);
+				submit_io(b, REQ_OP_READ, read_endio);
 			dm_bufio_release(b);
 
 			cond_resched();
@@ -2023,19 +2002,7 @@ static void __dm_bufio_prefetch(struct dm_bufio_client *c,
 flush_plug:
 	blk_finish_plug(&plug);
 }
-
-void dm_bufio_prefetch(struct dm_bufio_client *c, sector_t block, unsigned int n_blocks)
-{
-	return __dm_bufio_prefetch(c, block, n_blocks, IOPRIO_DEFAULT);
-}
 EXPORT_SYMBOL_GPL(dm_bufio_prefetch);
-
-void dm_bufio_prefetch_with_ioprio(struct dm_bufio_client *c, sector_t block,
-				unsigned int n_blocks, unsigned short ioprio)
-{
-	return __dm_bufio_prefetch(c, block, n_blocks, ioprio);
-}
-EXPORT_SYMBOL_GPL(dm_bufio_prefetch_with_ioprio);
 
 void dm_bufio_release(struct dm_buffer *b)
 {
@@ -2420,12 +2387,7 @@ static void __scan(struct dm_bufio_client *c)
 
 			atomic_long_dec(&c->need_shrink);
 			freed++;
-
-			if (unlikely(freed % SCAN_RESCHED_CYCLE == 0)) {
-				dm_bufio_unlock(c);
-				cond_resched();
-				dm_bufio_lock(c);
-			}
+			cond_resched();
 		}
 	}
 }
@@ -2442,13 +2404,6 @@ static void shrink_work(struct work_struct *w)
 static unsigned long dm_bufio_shrink_scan(struct shrinker *shrink, struct shrink_control *sc)
 {
 	struct dm_bufio_client *c;
-	bool bypass = false;
-
-	trace_android_vh_dm_bufio_shrink_scan_bypass(
-			dm_bufio_current_allocated,
-			&bypass);
-	if (bypass)
-		return 0;
 
 	c = container_of(shrink, struct dm_bufio_client, shrinker);
 	atomic_long_add(sc->nr_to_scan, &c->need_shrink);
@@ -2779,14 +2734,6 @@ static void cleanup_old_buffers(void)
 {
 	unsigned long max_age_hz = get_max_age_hz();
 	struct dm_bufio_client *c;
-	bool bypass = false;
-
-	trace_android_vh_cleanup_old_buffers_bypass(
-				dm_bufio_current_allocated,
-				&max_age_hz,
-				&bypass);
-	if (bypass)
-		return;
 
 	mutex_lock(&dm_bufio_clients_lock);
 

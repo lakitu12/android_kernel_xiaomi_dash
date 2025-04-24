@@ -341,16 +341,11 @@ static void divvy_up_power(u32 *req_power, u32 *max_power, int num_actors,
 	u32 extra_power, capped_extra_power;
 	int i;
 
-	if (!total_req_power) {
-		/*
-		 * Nobody requested anything, just give everybody
-		 * the maximum power
-		 */
-		for (i = 0; i < num_actors; i++)
-			granted_power[i] = max_power[i];
-
-		return;
-	}
+	/*
+	 * Prevent division by 0 if none of the actors request power.
+	 */
+	if (!total_req_power)
+		total_req_power = 1;
 
 	capped_extra_power = 0;
 	extra_power = 0;
@@ -663,8 +658,6 @@ static int power_allocator_bind(struct thermal_zone_device *tz)
 
 	if (!tz->tzp->sustainable_power)
 		dev_warn(&tz->device, "power_allocator: sustainable_power will be estimated\n");
-	else
-		params->sustainable_power = tz->tzp->sustainable_power;
 
 	get_governor_trips(tz, params);
 

@@ -20,7 +20,6 @@
 #include <linux/kvm_host.h>
 
 #include <asm/stacktrace/nvhe.h>
-#include <asm/kvm_pkvm_module.h>
 
 static struct stack_info stackinfo_get_overflow(void)
 {
@@ -51,7 +50,7 @@ static struct stack_info stackinfo_get_hyp(void)
 	struct kvm_nvhe_stacktrace_info *stacktrace_info
 				= this_cpu_ptr_nvhe_sym(kvm_stacktrace_info);
 	unsigned long low = (unsigned long)stacktrace_info->stack_base;
-	unsigned long high = low + NVHE_STACK_SIZE;
+	unsigned long high = low + PAGE_SIZE;
 
 	return (struct stack_info) {
 		.low = low,
@@ -61,8 +60,8 @@ static struct stack_info stackinfo_get_hyp(void)
 
 static struct stack_info stackinfo_get_hyp_kern_va(void)
 {
-	unsigned long low = (unsigned long)*this_cpu_ptr(&kvm_arm_hyp_stack_base);
-	unsigned long high = low + NVHE_STACK_SIZE;
+	unsigned long low = (unsigned long)*this_cpu_ptr(&kvm_arm_hyp_stack_page);
+	unsigned long high = low + PAGE_SIZE;
 
 	return (struct stack_info) {
 		.low = low,
@@ -148,18 +147,10 @@ static bool kvm_nvhe_dump_backtrace_entry(void *arg, unsigned long where)
 {
 	unsigned long va_mask = GENMASK_ULL(vabits_actual - 1, 0);
 	unsigned long hyp_offset = (unsigned long)arg;
-	unsigned long mod_addr = pkvm_el2_mod_kern_va(where & va_mask);
-	unsigned long where_kaslr;
 
-	if (mod_addr) {
-		where_kaslr = where = mod_addr;
-	} else {
-		/* Mask tags and convert to kern addr */
-		where = (where & va_mask) + hyp_offset;
-		where_kaslr = where + kaslr_offset();
-	}
-
-	kvm_err(" [<%016lx>] %pB\n", where, (void *)(where_kaslr));
+	/* Mask tags and convert to kern addr */
+	where = (where & va_mask) + hyp_offset;
+	kvm_err(" [<%016lx>] %pB\n", where, (void *)(where + kaslr_offset()));
 
 	return true;
 }

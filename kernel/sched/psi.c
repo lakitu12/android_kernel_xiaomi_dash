@@ -136,7 +136,6 @@
  * cost-wise, yet way more sensitive and accurate than periodic
  * sampling of the aggregate task states would be.
  */
-#include <trace/hooks/psi.h>
 
 static int psi_bug __read_mostly;
 
@@ -493,9 +492,6 @@ static u64 update_triggers(struct psi_group *group, u64 now, bool *update_total,
 		if (now < t->last_event_time + t->win.size)
 			continue;
 
-		trace_android_vh_psi_event(t);
-		trace_android_vh_psi_update_triggers(t, now, growth);
-
 		/* Generate an event */
 		if (cmpxchg(&t->event, 0, 1) == 0) {
 			if (t->of)
@@ -507,8 +503,6 @@ static u64 update_triggers(struct psi_group *group, u64 now, bool *update_total,
 		/* Reset threshold breach flag once event got generated */
 		t->pending_event = false;
 	}
-
-	trace_android_vh_psi_group(group);
 
 	return now + group->rtpoll_min_period;
 }
@@ -1007,13 +1001,11 @@ void psi_task_switch(struct task_struct *prev, struct task_struct *next,
 }
 
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
-static DEFINE_PER_CPU(u64, psi_irq_time);
 void psi_account_irqtime(struct rq *rq, struct task_struct *curr, struct task_struct *prev)
 {
 	int cpu = task_cpu(curr);
 	struct psi_group *group;
 	struct psi_group_cpu *groupc;
-	u64 *psi_time;
 	s64 delta;
 	u64 irq;
 
@@ -1026,11 +1018,10 @@ void psi_account_irqtime(struct rq *rq, struct task_struct *curr, struct task_st
 		return;
 
 	irq = irq_time_read(cpu);
-	psi_time =  &per_cpu(psi_irq_time, cpu);
-	delta = (s64)(irq - *psi_time);
+	delta = (s64)(irq - rq->psi_irq_time);
 	if (delta < 0)
 		return;
-	*psi_time = irq;
+	rq->psi_irq_time = irq;
 
 	do {
 		u64 now;
@@ -1307,12 +1298,10 @@ struct psi_trigger *psi_trigger_create(struct psi_group *group, char *buf,
 		return ERR_PTR(-EOPNOTSUPP);
 
 	/*
-	 * Checking the privilege on file->f_cred or selinux enabled here imply
-	 * that a privileged user could open the file and delegate the write
-	 * to an unprivileged one.
+	 * Checking the privilege here on file->f_cred implies that a privileged user
+	 * could open the file and delegate the write to an unprivileged one.
 	 */
-	privileged = cap_raised(file->f_cred->cap_effective, CAP_SYS_RESOURCE) ||
-		IS_ENABLED(CONFIG_DEFAULT_SECURITY_SELINUX);
+	privileged = cap_raised(file->f_cred->cap_effective, CAP_SYS_RESOURCE);
 
 	if (sscanf(buf, "some %u %u", &threshold_us, &window_us) == 2)
 		state = PSI_IO_SOME + res * 2;
@@ -1671,11 +1660,11 @@ static int __init psi_proc_init(void)
 {
 	if (psi_enable) {
 		proc_mkdir("pressure", NULL);
-		proc_create("pressure/io", 0, NULL, &psi_io_proc_ops);
-		proc_create("pressure/memory", 0, NULL, &psi_memory_proc_ops);
-		proc_create("pressure/cpu", 0, NULL, &psi_cpu_proc_ops);
+		proc_create("pressure/io", 0666, NULL, &psi_io_proc_ops);
+		proc_create("pressure/memory", 0666, NULL, &psi_memory_proc_ops);
+		proc_create("pressure/cpu", 0666, NULL, &psi_cpu_proc_ops);
 #ifdef CONFIG_IRQ_TIME_ACCOUNTING
-		proc_create("pressure/irq", 0, NULL, &psi_irq_proc_ops);
+		proc_create("pressure/irq", 0666, NULL, &psi_irq_proc_ops);
 #endif
 	}
 	return 0;

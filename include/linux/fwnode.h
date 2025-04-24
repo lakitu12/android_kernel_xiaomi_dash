@@ -13,7 +13,6 @@
 #include <linux/list.h>
 #include <linux/bits.h>
 #include <linux/err.h>
-#include <linux/android_kabi.h>
 
 struct fwnode_operations;
 struct device;
@@ -46,7 +45,6 @@ struct fwnode_handle {
 	struct list_head suppliers;
 	struct list_head consumers;
 	u8 flags;
-	ANDROID_KABI_RESERVE(1);
 };
 
 /*
@@ -64,9 +62,6 @@ struct fwnode_link {
 	struct fwnode_handle *consumer;
 	struct list_head c_hook;
 	u8 flags;
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
 };
 
 /**
@@ -88,7 +83,7 @@ struct fwnode_endpoint {
 #define SWNODE_GRAPH_PORT_NAME_FMT		"port@%u"
 #define SWNODE_GRAPH_ENDPOINT_NAME_FMT		"endpoint@%u"
 
-#define NR_FWNODE_REFERENCE_ARGS	8
+#define NR_FWNODE_REFERENCE_ARGS	16
 
 /**
  * struct fwnode_reference_args - Fwnode reference with additional arguments
@@ -215,8 +210,7 @@ static inline void fwnode_dev_initialized(struct fwnode_handle *fwnode,
 }
 
 extern bool fw_devlink_is_strict(void);
-int fwnode_link_add(struct fwnode_handle *con, struct fwnode_handle *sup,
-		    u8 flags);
+int fwnode_link_add(struct fwnode_handle *con, struct fwnode_handle *sup);
 void fwnode_links_purge(struct fwnode_handle *fwnode);
 void fw_devlink_purge_absent_suppliers(struct fwnode_handle *fwnode);
 

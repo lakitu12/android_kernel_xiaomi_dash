@@ -29,7 +29,6 @@
 #include <linux/writeback.h>
 #include <linux/backing-dev.h>
 #include <linux/pagevec.h>
-#include <linux/cleancache.h>
 #include "internal.h"
 
 /*
@@ -288,12 +287,6 @@ static struct bio *do_mpage_readpage(struct mpage_readpage_args *args)
 		folio_set_mappedtodisk(folio);
 	}
 
-	if (fully_mapped && blocks_per_page == 1 && !folio_test_uptodate(folio) &&
-	    cleancache_get_page(&folio->page) == 0) {
-		folio_mark_uptodate(folio);
-		goto confused;
-	}
-
 	/*
 	 * This folio will go to BIO.  Do we need to send this BIO off first?
 	 */
@@ -391,7 +384,7 @@ void mpage_readahead(struct readahead_control *rac, get_block_t get_block)
 	if (args.bio)
 		mpage_bio_submit_read(args.bio);
 }
-EXPORT_SYMBOL_NS(mpage_readahead, ANDROID_GKI_VFS_EXPORT_ONLY);
+EXPORT_SYMBOL(mpage_readahead);
 
 /*
  * This isn't called much at all
@@ -619,7 +612,6 @@ alloc_new:
 				GFP_NOFS);
 		bio->bi_iter.bi_sector = blocks[0] << (blkbits - 9);
 		wbc_init_bio(wbc, bio);
-		bio->bi_write_hint = inode->i_write_hint;
 	}
 
 	/*

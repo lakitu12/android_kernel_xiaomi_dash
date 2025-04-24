@@ -453,18 +453,6 @@ struct fuse_file_lock {
 /* Obsolete alias for FUSE_DIRECT_IO_ALLOW_MMAP */
 #define FUSE_DIRECT_IO_RELAX	FUSE_DIRECT_IO_ALLOW_MMAP
 
-/*
- * For FUSE < 7.36 FUSE_PASSTHROUGH has value (1 << 31).
- * This condition check is not really required, but would prevent having a
- * broken commit in the tree.
- */
-#if FUSE_KERNEL_VERSION > 7 ||                                                 \
-	(FUSE_KERNEL_VERSION == 7 && FUSE_KERNEL_MINOR_VERSION >= 36)
-#define FUSE_PASSTHROUGH (1ULL << 63)
-#else
-#define FUSE_PASSTHROUGH (1 << 31)
-#endif
-
 /**
  * CUSE INIT request/reply flags
  *
@@ -631,7 +619,6 @@ enum fuse_opcode {
 	FUSE_SYNCFS		= 50,
 	FUSE_TMPFILE		= 51,
 	FUSE_STATX		= 52,
-	FUSE_CANONICAL_PATH	= 2016,
 
 	/* CUSE specific operations */
 	CUSE_INIT		= 4096,
@@ -774,7 +761,7 @@ struct fuse_create_in {
 struct fuse_open_out {
 	uint64_t	fh;
 	uint32_t	open_flags;
-	uint32_t	passthrough_fh;
+	uint32_t	padding;
 };
 
 struct fuse_release_in {
@@ -981,19 +968,8 @@ struct fuse_in_header {
 	uint32_t	uid;
 	uint32_t	gid;
 	uint32_t	pid;
-
-	/*
-	 * fuse-bpf reused the padding field to pass errors to postfilter
-	 * Unfortunately this field has now been used for extlen.
-	 * Manage at least temporarily with a union
-	 */
-	union {
-		struct {
-			uint16_t	total_extlen; /* length of extensions in 8byte units */
-			uint16_t	padding;
-		};
-		uint32_t error_in;
-	};
+	uint16_t	total_extlen; /* length of extensions in 8byte units */
+	uint16_t	padding;
 };
 
 struct fuse_out_header {
@@ -1076,9 +1052,6 @@ struct fuse_notify_retrieve_in {
 /* Device ioctls: */
 #define FUSE_DEV_IOC_MAGIC		229
 #define FUSE_DEV_IOC_CLONE		_IOR(FUSE_DEV_IOC_MAGIC, 0, uint32_t)
-/* 127 is reserved for the V1 interface implementation in Android (deprecated) */
-/* 126 is reserved for the V2 interface implementation in Android */
-#define FUSE_DEV_IOC_PASSTHROUGH_OPEN	_IOW(FUSE_DEV_IOC_MAGIC, 126, uint32_t)
 
 struct fuse_lseek_in {
 	uint64_t	fh;

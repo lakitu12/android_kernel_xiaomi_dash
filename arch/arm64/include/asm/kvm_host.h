@@ -80,34 +80,27 @@ u32 __attribute_const__ kvm_target_cpu(void);
 int kvm_reset_vcpu(struct kvm_vcpu *vcpu);
 void kvm_arm_vcpu_destroy(struct kvm_vcpu *vcpu);
 
-/* Head holds page head and it's order. */
 struct kvm_hyp_memcache {
 	phys_addr_t head;
 	unsigned long nr_pages;
-	unsigned long flags;
 };
 
 static inline void push_hyp_memcache(struct kvm_hyp_memcache *mc,
 				     phys_addr_t *p,
-				     phys_addr_t (*to_pa)(void *virt),
-				     unsigned long order)
+				     phys_addr_t (*to_pa)(void *virt))
 {
 	*p = mc->head;
-	mc->head = (to_pa(p) & PAGE_MASK) |
-		   FIELD_PREP(~PAGE_MASK, order);
+	mc->head = to_pa(p);
 	mc->nr_pages++;
 }
 
 static inline void *pop_hyp_memcache(struct kvm_hyp_memcache *mc,
-				     void *(*to_va)(phys_addr_t phys),
-				     unsigned long *order)
+				     void *(*to_va)(phys_addr_t phys))
 {
-	phys_addr_t *p = to_va(mc->head & PAGE_MASK);
+	phys_addr_t *p = to_va(mc->head);
 
 	if (!mc->nr_pages)
 		return NULL;
-
-	*order = FIELD_GET(~PAGE_MASK, mc->head);
 
 	mc->head = *p;
 	mc->nr_pages--;
@@ -117,54 +110,32 @@ static inline void *pop_hyp_memcache(struct kvm_hyp_memcache *mc,
 
 static inline int __topup_hyp_memcache(struct kvm_hyp_memcache *mc,
 				       unsigned long min_pages,
-				       void *(*alloc_fn)(void *arg, unsigned long order),
+				       void *(*alloc_fn)(void *arg),
 				       phys_addr_t (*to_pa)(void *virt),
-				       void *arg,
-				       unsigned long order)
+				       void *arg)
 {
 	while (mc->nr_pages < min_pages) {
-		phys_addr_t *p = alloc_fn(arg, order);
+		phys_addr_t *p = alloc_fn(arg);
 
 		if (!p)
 			return -ENOMEM;
-		push_hyp_memcache(mc, p, to_pa, order);
+		push_hyp_memcache(mc, p, to_pa);
 	}
 
 	return 0;
 }
 
 static inline void __free_hyp_memcache(struct kvm_hyp_memcache *mc,
-				       void (*free_fn)(void *virt, void *arg, unsigned long order),
+				       void (*free_fn)(void *virt, void *arg),
 				       void *(*to_va)(phys_addr_t phys),
 				       void *arg)
 {
-	unsigned long order;
-	void *p;
-
-	while (mc->nr_pages) {
-		p = pop_hyp_memcache(mc, to_va, &order);
-		free_fn(p, arg, order);
-	}
+	while (mc->nr_pages)
+		free_fn(pop_hyp_memcache(mc, to_va), arg);
 }
-
-#define HYP_MEMCACHE_ACCOUNT_KMEMCG BIT(1)
-#define HYP_MEMCACHE_ACCOUNT_STAGE2 BIT(2)
 
 void free_hyp_memcache(struct kvm_hyp_memcache *mc);
-int topup_hyp_memcache(struct kvm_hyp_memcache *mc, unsigned long min_pages, unsigned long order);
-int topup_hyp_memcache_gfp(struct kvm_hyp_memcache *mc, unsigned long min_pages,
-			   unsigned long order, gfp_t gfp);
-
-static inline void init_hyp_memcache(struct kvm_hyp_memcache *mc)
-{
-	memset(mc, 0, sizeof(*mc));
-}
-
-static inline void init_hyp_stage2_memcache(struct kvm_hyp_memcache *mc)
-{
-	init_hyp_memcache(mc);
-	mc->flags = HYP_MEMCACHE_ACCOUNT_KMEMCG | HYP_MEMCACHE_ACCOUNT_STAGE2;
-}
+int topup_hyp_memcache(struct kvm_hyp_memcache *mc, unsigned long min_pages);
 
 struct kvm_vmid {
 	atomic64_t id;
@@ -223,39 +194,11 @@ struct kvm_smccc_features {
 	unsigned long vendor_hyp_bmap;
 };
 
-struct kvm_pinned_page {
-	union {
-		struct rb_node		node;
-		struct list_head	list_node;
-	};
-	struct page		*page;
-	u64			ipa;
-	u64			__subtree_last;
-	u8			order;
-	u16			pins;
-};
-
-struct kvm_pinned_page
-*kvm_pinned_pages_iter_first(struct rb_root_cached *root, u64 start, u64 end);
-struct kvm_pinned_page
-*kvm_pinned_pages_iter_next(struct kvm_pinned_page *ppage, u64 start, u64 end);
-
-#define for_ppage_node_in_range(kvm, start, end, __ppage, __tmp)				\
-	for (__ppage = kvm_pinned_pages_iter_first(&(kvm)->arch.pkvm.pinned_pages, start, end - 1);\
-	    __ppage && ({ __tmp = kvm_pinned_pages_iter_next(__ppage, start, end - 1); 1; });	\
-	    __ppage = __tmp)
-
-void kvm_pinned_pages_remove(struct kvm_pinned_page *ppage,
-			     struct rb_root_cached *root);
-
 typedef unsigned int pkvm_handle_t;
 
 struct kvm_protected_vm {
 	pkvm_handle_t handle;
-	struct kvm_hyp_memcache stage2_teardown_mc;
-	_ANDROID_KABI_REPLACE(struct maple_tree __unused, struct rb_root_cached pinned_pages);
-	gpa_t pvmfw_load_addr;
-	bool enabled;
+	struct kvm_hyp_memcache teardown_mc;
 };
 
 struct kvm_arch {
@@ -299,8 +242,6 @@ struct kvm_arch {
 #define KVM_ARCH_FLAG_SMCCC_FILTER_CONFIGURED		7
 	/* Initial ID reg values loaded */
 #define KVM_ARCH_FLAG_ID_REGS_INITIALIZED		8
-	/* Guest has bought into the MMIO guard extension */
-#define KVM_ARCH_FLAG_MMIO_GUARD			9
 	unsigned long flags;
 
 	/* VM-wide vCPU feature set */
@@ -465,7 +406,6 @@ enum vcpu_sysreg {
 	HFGITR_EL2,
 	HDFGRTR_EL2,
 	HDFGWTR_EL2,
-	HAFGRTR_EL2,
 	CNTHP_CTL_EL2,
 	CNTHP_CVAL_EL2,
 	CNTHV_CTL_EL2,
@@ -516,75 +456,12 @@ extern s64 kvm_nvhe_sym(hyp_physvirt_offset);
 extern u64 kvm_nvhe_sym(hyp_cpu_logical_map)[NR_CPUS];
 #define hyp_cpu_logical_map CHOOSE_NVHE_SYM(hyp_cpu_logical_map)
 
-struct kvm_iommu_driver {
-	int (*init_driver)(void);
-	void (*remove_driver)(void);
-	pkvm_handle_t (*get_iommu_id)(struct device *dev);
-	ANDROID_KABI_RESERVE(1);
-	ANDROID_KABI_RESERVE(2);
-	ANDROID_KABI_RESERVE(3);
-	ANDROID_KABI_RESERVE(4);
-	ANDROID_KABI_RESERVE(5);
-	ANDROID_KABI_RESERVE(6);
-	ANDROID_KABI_RESERVE(7);
-	ANDROID_KABI_RESERVE(8);
-};
-
 struct vcpu_reset_state {
 	unsigned long	pc;
 	unsigned long	r0;
 	bool		be;
 	bool		reset;
 };
-
-struct kvm_hyp_req {
-#define KVM_HYP_LAST_REQ	0
-#define KVM_HYP_REQ_TYPE_MEM	1
-#define KVM_HYP_REQ_TYPE_MAP	2
-#define KVM_HYP_REQ_TYPE_SPLIT	3
-	u8 type;
-	union {
-		struct {
-#define REQ_MEM_DEST_HYP_ALLOC		1
-#define REQ_MEM_DEST_VCPU_MEMCACHE	2
-#define REQ_MEM_DEST_HYP_IOMMU		3
-			u8	dest;
-			int	nr_pages;
-			int	sz_alloc; /* Size of the page. */
-		} mem;
-		struct {
-			unsigned long	guest_ipa;
-			size_t		size;
-		} map;
-#ifndef __GENKSYMS__
-		struct {
-			unsigned long	guest_ipa;
-			size_t		size;
-		} split;
-#endif
-	};
-};
-
-#define KVM_HYP_REQ_MAX (PAGE_SIZE / sizeof(struct kvm_hyp_req))
-/*
- * De-serialize request from SMCCC return.
- * See hyp-main.c for serialization.
- */
-/* Register a2. */
-#define	SMCCC_REQ_TYPE_MASK		GENMASK_ULL(7, 0)
-#define SMCCC_REQ_DEST_MASK		GENMASK_ULL(15 , 8)
-/* Register a3. */
-#define SMCCC_REQ_NR_PAGES_MASK		GENMASK_ULL(31 , 0)
-#define SMCCC_REQ_SZ_ALLOC_MASK		GENMASK_ULL(63 , 32)
-
-static inline void hyp_reqs_smccc_decode(struct arm_smccc_res *res,
-					 struct kvm_hyp_req *req)
-{
-	req->type = FIELD_GET(SMCCC_REQ_TYPE_MASK, res->a2);
-	req->mem.dest = FIELD_GET(SMCCC_REQ_DEST_MASK, res->a2);
-	req->mem.nr_pages = FIELD_GET(SMCCC_REQ_NR_PAGES_MASK, res->a3);
-	req->mem.sz_alloc = FIELD_GET(SMCCC_REQ_SZ_ALLOC_MASK, res->a3);
-}
 
 struct kvm_vcpu_arch {
 	struct kvm_cpu_context ctxt;
@@ -610,9 +487,6 @@ struct kvm_vcpu_arch {
 	/* Values of trap registers for the guest. */
 	u64 hcr_el2;
 	u64 mdcr_el2;
-
-	/* DO NOT USE: Removed upstream. Kept to not break the KMI. */
-	u64 cptr_el2;
 
 	/* Values of trap registers for the host before guest entry. */
 	u64 mdcr_el2_host;
@@ -662,8 +536,7 @@ struct kvm_vcpu_arch {
 	struct kvm_guest_debug_arch vcpu_debug_state;
 	struct kvm_guest_debug_arch external_debug_state;
 
-	/* DO NOT USE: Removed upstream. Kept to not break the KMI. */
-	struct user_fpsimd_state *host_fpsimd_state;
+	struct task_struct *parent_task;
 
 	struct {
 		/* {Break,watch}point registers */
@@ -695,12 +568,8 @@ struct kvm_vcpu_arch {
 	struct kvm_mp_state mp_state;
 	spinlock_t mp_state_lock;
 
-	union {
-		/* Cache some mmu pages needed inside spinlock regions */
-		struct kvm_mmu_memory_cache mmu_page_cache;
-		/* Pages to be donated to pkvm/EL2 if it runs out */
-		struct kvm_hyp_memcache stage2_mc;
-	};
+	/* Cache some mmu pages needed inside spinlock regions */
+	struct kvm_mmu_memory_cache mmu_page_cache;
 
 	/* feature flags */
 	DECLARE_BITMAP(features, KVM_VCPU_MAX_FEATURES);
@@ -719,9 +588,6 @@ struct kvm_vcpu_arch {
 
 	/* Per-vcpu CCSIDR override or NULL */
 	u32 *ccsidr;
-
-	/* PAGE_SIZE bound list of requests from the hypervisor to the host. */
-	struct kvm_hyp_req *hyp_reqs;
 };
 
 /*
@@ -796,25 +662,9 @@ struct kvm_vcpu_arch {
 		__vcpu_flags_preempt_enable();			\
 	} while (0)
 
-#define __vcpu_copy_flag(vt, vs, flagset, f, m)			\
-	do {							\
-		typeof(vs->arch.flagset) tmp, val;		\
-								\
-		__build_check_flag(vs, flagset, f, m);		\
-								\
-		val = READ_ONCE(vs->arch.flagset);		\
-		val &= (m);					\
-		tmp = READ_ONCE(vt->arch.flagset);		\
-		tmp &= ~(m);					\
-		tmp |= val;					\
-		WRITE_ONCE(vt->arch.flagset, tmp);		\
-	} while (0)
-
-
 #define vcpu_get_flag(v, ...)	__vcpu_get_flag((v), __VA_ARGS__)
 #define vcpu_set_flag(v, ...)	__vcpu_set_flag((v), __VA_ARGS__)
 #define vcpu_clear_flag(v, ...)	__vcpu_clear_flag((v), __VA_ARGS__)
-#define vcpu_copy_flag(vt, vs,...) __vcpu_copy_flag((vt), (vs), __VA_ARGS__)
 
 /* SVE exposed to guest */
 #define GUEST_HAS_SVE		__vcpu_single_flag(cflags, BIT(0))
@@ -834,8 +684,6 @@ struct kvm_vcpu_arch {
 #define INCREMENT_PC		__vcpu_single_flag(iflags, BIT(1))
 /* Target EL/MODE (not a single flag, but let's abuse the macro) */
 #define EXCEPT_MASK		__vcpu_single_flag(iflags, GENMASK(3, 1))
-/* Cover both PENDING_EXCEPTION and EXCEPT_MASK for global operations */
-#define PC_UPDATE_REQ		__vcpu_single_flag(iflags, GENMASK(3, 0))
 
 /* Helpers to encode exceptions with minimum fuss */
 #define __EXCEPT_MASK_VAL	unpack_vcpu_flag(EXCEPT_MASK)
@@ -867,10 +715,8 @@ struct kvm_vcpu_arch {
 #define DEBUG_STATE_SAVE_SPE	__vcpu_single_flag(iflags, BIT(5))
 /* Save TRBE context if active  */
 #define DEBUG_STATE_SAVE_TRBE	__vcpu_single_flag(iflags, BIT(6))
-/* vcpu running in HYP context (VHE-only) */
+/* vcpu running in HYP context */
 #define VCPU_HYP_CONTEXT	__vcpu_single_flag(iflags, BIT(7))
-/* pKVM host vcpu state is dirty, needs resync (nVHE-only) */
-#define PKVM_HOST_STATE_DIRTY	__vcpu_single_flag(iflags, BIT(7))
 
 /* Physical CPU not in supported_cpus */
 #define ON_UNSUPPORTED_CPU	__vcpu_single_flag(sflags, BIT(2))
@@ -890,23 +736,21 @@ struct kvm_vcpu_arch {
 #define vcpu_sve_pffr(vcpu) (kern_hyp_va((vcpu)->arch.sve_state) +	\
 			     sve_ffr_offset((vcpu)->arch.sve_max_vl))
 
-#define _vcpu_sve_state_size(sve_max_vl) ({				\
+#define vcpu_sve_max_vq(vcpu)	sve_vq_from_vl((vcpu)->arch.sve_max_vl)
+
+#define vcpu_sve_state_size(vcpu) ({					\
 	size_t __size_ret;						\
-	unsigned int __vq;						\
+	unsigned int __vcpu_vq;						\
 									\
-	if (WARN_ON(!sve_vl_valid(sve_max_vl))) {			\
+	if (WARN_ON(!sve_vl_valid((vcpu)->arch.sve_max_vl))) {		\
 		__size_ret = 0;						\
 	} else {							\
-		__vq = sve_vq_from_vl(sve_max_vl);			\
-		__size_ret = SVE_SIG_REGS_SIZE(__vq);			\
+		__vcpu_vq = vcpu_sve_max_vq(vcpu);			\
+		__size_ret = SVE_SIG_REGS_SIZE(__vcpu_vq);		\
 	}								\
 									\
 	__size_ret;							\
 })
-
-#define vcpu_sve_max_vq(vcpu) sve_vq_from_vl((vcpu)->arch.sve_max_vl)
-
-#define vcpu_sve_state_size(vcpu) _vcpu_sve_state_size((vcpu)->arch.sve_max_vl)
 
 #define KVM_GUESTDBG_VALID_MASK (KVM_GUESTDBG_ENABLE | \
 				 KVM_GUESTDBG_USE_SW_BP | \
@@ -948,6 +792,9 @@ struct kvm_vcpu_arch {
 #define ctxt_sys_reg(c,r)	(*__ctxt_sys_reg(c,r))
 
 #define __vcpu_sys_reg(v,r)	(ctxt_sys_reg(&(v)->arch.ctxt, (r)))
+
+u64 vcpu_read_sys_reg(const struct kvm_vcpu *vcpu, int reg);
+void vcpu_write_sys_reg(struct kvm_vcpu *vcpu, u64 val, int reg);
 
 static inline bool __vcpu_read_sys_reg_from_cpu(int reg, u64 *val)
 {
@@ -1038,33 +885,8 @@ static inline bool __vcpu_write_sys_reg_to_cpu(u64 val, int reg)
 	return true;
 }
 
-#define vcpu_read_sys_reg(__vcpu, reg)					\
-	({								\
-		u64 __val = 0x8badf00d8badf00d;				\
-									\
-		/* SYSREGS_ON_CPU is only used in VHE */		\
-		((!is_nvhe_hyp_code() &&				\
-		  vcpu_get_flag(__vcpu, SYSREGS_ON_CPU) &&		\
-		  __vcpu_read_sys_reg_from_cpu(reg, &__val))) ?		\
-		 __val							\
-		 :							\
-		 ctxt_sys_reg(&__vcpu->arch.ctxt, reg);			\
-	 })
-
-#define vcpu_write_sys_reg(__vcpu, __val, reg)				\
-	do {								\
-		/* SYSREGS_ON_CPU is only used in VHE */		\
-		if (is_nvhe_hyp_code() ||				\
-		    !vcpu_get_flag(__vcpu, SYSREGS_ON_CPU) ||		\
-		    !__vcpu_write_sys_reg_to_cpu(__val, reg))		\
-			ctxt_sys_reg(&__vcpu->arch.ctxt, reg) = __val;	\
-	} while (0)
-
 struct kvm_vm_stat {
 	struct kvm_vm_stat_generic generic;
-	atomic64_t protected_hyp_mem;
-	atomic64_t protected_shared_mem;
-	atomic64_t protected_pgtable_mem;
 };
 
 struct kvm_vcpu_stat {
@@ -1100,18 +922,7 @@ void kvm_arm_resume_guest(struct kvm *kvm);
 #define vcpu_has_run_once(vcpu)	!!rcu_access_pointer((vcpu)->pid)
 
 #ifndef __KVM_NVHE_HYPERVISOR__
-#define kvm_call_hyp_nvhe_smccc(f, ...)					\
-	({								\
-		struct arm_smccc_res res;				\
-									\
-		arm_smccc_1_1_hvc(KVM_HOST_SMCCC_FUNC(f),		\
-				  ##__VA_ARGS__, &res);			\
-		WARN_ON(res.a0 != SMCCC_RET_SUCCESS);			\
-									\
-		res;							\
-	})
-
-#define kvm_call_hyp_nvhe(f, ...)					\
+#define kvm_call_hyp_nvhe(f, ...)						\
 	({								\
 		struct arm_smccc_res res;				\
 									\
@@ -1246,25 +1057,8 @@ void kvm_arm_setup_debug(struct kvm_vcpu *vcpu);
 void kvm_arm_clear_debug(struct kvm_vcpu *vcpu);
 void kvm_arm_reset_debug_ptr(struct kvm_vcpu *vcpu);
 
-#define __vcpu_save_guest_debug_regs(vcpu)				\
-	do {								\
-		u64 val = vcpu_read_sys_reg(vcpu, MDSCR_EL1);		\
-									\
-		(vcpu)->arch.guest_debug_preserved.mdscr_el1 = val;	\
-	} while(0)
-
-#define __vcpu_restore_guest_debug_regs(vcpu)				\
-	do {								\
-		u64 val = (vcpu)->arch.guest_debug_preserved.mdscr_el1;	\
-									\
-		vcpu_write_sys_reg(vcpu, val, MDSCR_EL1);		\
-	} while (0)
-
 #define kvm_vcpu_os_lock_enabled(vcpu)		\
 	(!!(__vcpu_sys_reg(vcpu, OSLSR_EL1) & OSLSR_EL1_OSLK))
-
-#define kvm_vcpu_needs_debug_regs(vcpu)		\
-	((vcpu)->guest_debug || kvm_vcpu_os_lock_enabled(vcpu))
 
 int kvm_arm_vcpu_arch_set_attr(struct kvm_vcpu *vcpu,
 			       struct kvm_device_attr *attr);
@@ -1284,6 +1078,7 @@ void kvm_arch_vcpu_load_fp(struct kvm_vcpu *vcpu);
 void kvm_arch_vcpu_ctxflush_fp(struct kvm_vcpu *vcpu);
 void kvm_arch_vcpu_ctxsync_fp(struct kvm_vcpu *vcpu);
 void kvm_arch_vcpu_put_fp(struct kvm_vcpu *vcpu);
+void kvm_vcpu_unshare_task_fp(struct kvm_vcpu *vcpu);
 
 static inline bool kvm_pmu_counter_deferred(struct perf_event_attr *attr)
 {
@@ -1319,7 +1114,10 @@ struct kvm *kvm_arch_alloc_vm(void);
 
 #define __KVM_HAVE_ARCH_FLUSH_REMOTE_TLBS_RANGE
 
-#define kvm_vm_is_protected(kvm)	((kvm)->arch.pkvm.enabled)
+static inline bool kvm_vm_is_protected(struct kvm *kvm)
+{
+	return false;
+}
 
 int kvm_arm_vcpu_finalize(struct kvm_vcpu *vcpu, int feature);
 bool kvm_arm_vcpu_is_finalized(struct kvm_vcpu *vcpu);
@@ -1349,31 +1147,4 @@ static inline void kvm_hyp_reserve(void) { }
 void kvm_arm_vcpu_power_off(struct kvm_vcpu *vcpu);
 bool kvm_arm_vcpu_stopped(struct kvm_vcpu *vcpu);
 
-int kvm_iommu_init_driver(void);
-void kvm_iommu_remove_driver(void);
-
-struct page *kvm_iommu_cma_alloc(void);
-bool kvm_iommu_cma_release(struct page *p);
-
-int pkvm_iommu_suspend(struct device *dev);
-int pkvm_iommu_resume(struct device *dev);
-
-struct kvm_iommu_ops;
-
-int kvm_iommu_init_hyp(struct kvm_iommu_ops *hyp_ops,
-		       struct kvm_hyp_memcache *atomic_mc,
-		       unsigned long init_arg);
-
-int kvm_iommu_register_driver(struct kvm_iommu_driver *kern_ops);
-
-/* Allocator interface IDs. */
-#define HYP_ALLOC_MGT_HEAP_ID		0
-#define HYP_ALLOC_MGT_IOMMU_ID		1
-
-unsigned long __pkvm_reclaim_hyp_alloc_mgt(unsigned long nr_pages);
-int __pkvm_topup_hyp_alloc_mgt_mc(unsigned long id, struct kvm_hyp_memcache *mc);
-int __pkvm_topup_hyp_alloc_mgt(unsigned long id, unsigned long nr_pages,
-			       unsigned long sz_alloc);
-int __pkvm_topup_hyp_alloc_mgt_gfp(unsigned long id, unsigned long nr_pages,
-				   unsigned long sz_alloc, gfp_t gfp);
 #endif /* __ARM64_KVM_HOST_H__ */

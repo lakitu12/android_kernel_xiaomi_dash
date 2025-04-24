@@ -33,13 +33,6 @@
 #include "of_private.h"
 
 /*
- * __dtb_empty_root_begin[] and __dtb_empty_root_end[] magically created by
- * cmd_dt_S_dtb in scripts/Makefile.lib
- */
-extern uint8_t __dtb_empty_root_begin[];
-extern uint8_t __dtb_empty_root_end[];
-
-/*
  * of_fdt_limit_memory - limit the number of regions in the /memory node
  * @limit: maximum entries
  *
@@ -623,8 +616,6 @@ static void __init fdt_reserve_elfcorehdr(void)
 	}
 
 	memblock_reserve(elfcorehdr_addr, elfcorehdr_size);
-	memblock_memsize_record("elfcorehdr", elfcorehdr_addr, elfcorehdr_size,
-				false, false);
 
 	pr_info("Reserving %llu KiB of memory at 0x%llx for elfcorehdr\n",
 		elfcorehdr_size >> 10, elfcorehdr_addr);
@@ -645,9 +636,6 @@ void __init early_init_fdt_scan_reserved_mem(void)
 	if (!initial_boot_params)
 		return;
 
-	memblock_memsize_detect_hole();
-	memblock_memsize_disable_tracking();
-
 	fdt_scan_reserved_mem();
 	fdt_reserve_elfcorehdr();
 
@@ -657,12 +645,9 @@ void __init early_init_fdt_scan_reserved_mem(void)
 		if (!size)
 			break;
 		memblock_reserve(base, size);
-		memblock_memsize_record("memreserve", base, size, false, false);
 	}
 
 	fdt_init_reserved_mem();
-
-	memblock_memsize_enable_tracking();
 }
 
 /**
@@ -1166,33 +1151,10 @@ int __init early_init_dt_scan_memory(void)
 	return found_memory;
 }
 
-/*
- * Convert configs to something easy to use in C code
- */
-#if defined(CONFIG_CMDLINE_FORCE)
-static const int overwrite_incoming_cmdline = 1;
-static const int read_dt_cmdline;
-static const int concat_cmdline;
-#elif defined(CONFIG_CMDLINE_EXTEND)
-static const int overwrite_incoming_cmdline;
-static const int read_dt_cmdline = 1;
-static const int concat_cmdline = 1;
-#else /* CMDLINE_FROM_BOOTLOADER */
-static const int overwrite_incoming_cmdline;
-static const int read_dt_cmdline = 1;
-static const int concat_cmdline;
-#endif
-
-#ifdef CONFIG_CMDLINE
-static const char *config_cmdline = CONFIG_CMDLINE;
-#else
-static const char *config_cmdline = "";
-#endif
-
 int __init early_init_dt_scan_chosen(char *cmdline)
 {
-	int l = 0, node;
-	const char *p = NULL;
+	int l, node;
+	const char *p;
 	const void *rng_seed;
 	const void *fdt = initial_boot_params;
 
@@ -1220,29 +1182,30 @@ int __init early_init_dt_scan_chosen(char *cmdline)
 				fdt_totalsize(initial_boot_params));
 	}
 
-	/* Put CONFIG_CMDLINE in if forced or if data had nothing in it to start */
-	if (overwrite_incoming_cmdline || !cmdline[0])
-		strscpy(cmdline, config_cmdline, COMMAND_LINE_SIZE);
-
-	/* Retrieve command line unless forcing */
-	if (read_dt_cmdline)
-		p = of_get_flat_dt_prop(node, "bootargs", &l);
-	if (p != NULL && l > 0) {
-		if (concat_cmdline) {
-			int cmdline_len;
-			int copy_len;
-			strlcat(cmdline, " ", COMMAND_LINE_SIZE);
-			cmdline_len = strlen(cmdline);
-			copy_len = COMMAND_LINE_SIZE - cmdline_len - 1;
-			copy_len = min((int)l, copy_len);
-			strncpy(cmdline + cmdline_len, p, copy_len);
-			cmdline[cmdline_len + copy_len] = '\0';
-		} else {
-			strscpy(cmdline, p, min(l, COMMAND_LINE_SIZE));
-		}
-	}
+	/* Retrieve command line */
+	p = of_get_flat_dt_prop(node, "bootargs", &l);
+	if (p != NULL && l > 0)
+		strscpy(cmdline, p, min(l, COMMAND_LINE_SIZE));
 
 handle_cmdline:
+	/*
+	 * CONFIG_CMDLINE is meant to be a default in case nothing else
+	 * managed to set the command line, unless CONFIG_CMDLINE_FORCE
+	 * is set in which case we override whatever was found earlier.
+	 */
+#ifdef CONFIG_CMDLINE
+#if defined(CONFIG_CMDLINE_EXTEND)
+	strlcat(cmdline, " ", COMMAND_LINE_SIZE);
+	strlcat(cmdline, CONFIG_CMDLINE, COMMAND_LINE_SIZE);
+#elif defined(CONFIG_CMDLINE_FORCE)
+	strscpy(cmdline, CONFIG_CMDLINE, COMMAND_LINE_SIZE);
+#else
+	/* No arguments from boot loader, use kernel's  cmdl*/
+	if (!((char *)cmdline)[0])
+		strscpy(cmdline, CONFIG_CMDLINE, COMMAND_LINE_SIZE);
+#endif
+#endif /* CONFIG_CMDLINE */
+
 	pr_debug("Command line is: %s\n", (char *)cmdline);
 
 	return 0;
@@ -1357,21 +1320,6 @@ bool __init early_init_dt_scan(void *dt_virt, phys_addr_t dt_phys)
 	return true;
 }
 
-static void *__init copy_device_tree(void *fdt)
-{
-	int size;
-	void *dt;
-
-	size = fdt_totalsize(fdt);
-	dt = early_init_dt_alloc_memory_arch(size,
-					     roundup_pow_of_two(FDT_V17_SIZE));
-
-	if (dt)
-		memcpy(dt, fdt, size);
-
-	return dt;
-}
-
 /**
  * unflatten_device_tree - create tree of device_nodes from flat blob
  *
@@ -1382,22 +1330,7 @@ static void *__init copy_device_tree(void *fdt)
  */
 void __init unflatten_device_tree(void)
 {
-	void *fdt = initial_boot_params;
-
-	/* Populate an empty root node when bootloader doesn't provide one */
-	if (!fdt) {
-		fdt = (void *) __dtb_empty_root_begin;
-		/* fdt_totalsize() will be used for copy size */
-		if (fdt_totalsize(fdt) >
-		    __dtb_empty_root_end - __dtb_empty_root_begin) {
-			pr_err("invalid size in dtb_empty_root\n");
-			return;
-		}
-		of_fdt_crc32 = crc32_be(~0, fdt, fdt_totalsize(fdt));
-		fdt = copy_device_tree(fdt);
-	}
-
-	__unflatten_device_tree(fdt, NULL, &of_root,
+	__unflatten_device_tree(initial_boot_params, NULL, &of_root,
 				early_init_dt_alloc_memory_arch, false);
 
 	/* Get pointer to "/chosen" and "/aliases" nodes for use everywhere */
@@ -1419,9 +1352,22 @@ void __init unflatten_device_tree(void)
  */
 void __init unflatten_and_copy_device_tree(void)
 {
-	if (initial_boot_params)
-		initial_boot_params = copy_device_tree(initial_boot_params);
+	int size;
+	void *dt;
 
+	if (!initial_boot_params) {
+		pr_warn("No valid device tree found, continuing without\n");
+		return;
+	}
+
+	size = fdt_totalsize(initial_boot_params);
+	dt = early_init_dt_alloc_memory_arch(size,
+					     roundup_pow_of_two(FDT_V17_SIZE));
+
+	if (dt) {
+		memcpy(dt, initial_boot_params, size);
+		initial_boot_params = dt;
+	}
 	unflatten_device_tree();
 }
 

@@ -25,7 +25,6 @@
 #include <linux/ww_mutex.h>
 
 #include <trace/events/lock.h>
-#include <trace/hooks/dtask.h>
 
 #include "rtmutex_common.h"
 
@@ -326,13 +325,12 @@ static __always_inline bool unlock_rt_mutex_safe(struct rt_mutex_base *lock,
 
 static __always_inline int __waiter_prio(struct task_struct *task)
 {
-	int waiter_prio = 0;
+	int prio = task->prio;
 
-	trace_android_vh_rtmutex_waiter_prio(task, &waiter_prio);
-	if (waiter_prio > 0)
-		return waiter_prio;
+	if (!rt_prio(prio))
+		return DEFAULT_PRIO;
 
-	return task->prio;
+	return prio;
 }
 
 /*
@@ -409,13 +407,7 @@ static __always_inline int rt_waiter_node_equal(struct rt_waiter_node *left,
 static inline bool rt_mutex_steal(struct rt_mutex_waiter *waiter,
 				  struct rt_mutex_waiter *top_waiter)
 {
-	bool ret = false;
-
 	if (rt_waiter_node_less(&waiter->tree, &top_waiter->tree))
-		return true;
-
-	trace_android_vh_rt_mutex_steal(waiter->tree.prio, top_waiter->tree.prio, &ret);
-	if (ret)
 		return true;
 
 #ifdef RT_MUTEX_BUILD_SPINLOCKS
@@ -1213,7 +1205,6 @@ static int __sched task_blocks_on_rt_mutex(struct rt_mutex_base *lock,
 	if (owner == task && !(build_ww_mutex() && ww_ctx))
 		return -EDEADLK;
 
-	trace_android_vh_task_blocks_on_rtmutex(lock, waiter, task, ww_ctx, &chwalk);
 	raw_spin_lock(&task->pi_lock);
 	waiter->task = task;
 	waiter->lock = lock;
@@ -1595,7 +1586,6 @@ static int __sched rt_mutex_slowlock_block(struct rt_mutex_base *lock,
 	struct task_struct *owner;
 	int ret = 0;
 
-	trace_android_vh_rtmutex_wait_start(lock);
 	for (;;) {
 		/* Try to acquire the lock: */
 		if (try_to_take_rt_mutex(lock, current, waiter))
@@ -1629,7 +1619,6 @@ static int __sched rt_mutex_slowlock_block(struct rt_mutex_base *lock,
 		set_current_state(state);
 	}
 
-	trace_android_vh_rtmutex_wait_finish(lock);
 	__set_current_state(TASK_RUNNING);
 	return ret;
 }

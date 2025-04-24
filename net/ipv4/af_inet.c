@@ -121,7 +121,6 @@
 #include <net/compat.h>
 
 #include <trace/events/sock.h>
-#include <trace/hooks/net.h>
 
 /* The inetsw table contains everything that inet_create needs to
  * build a new socket.
@@ -252,7 +251,7 @@ EXPORT_SYMBOL(inet_listen);
 static int inet_create(struct net *net, struct socket *sock, int protocol,
 		       int kern)
 {
-	struct sock *sk = NULL;
+	struct sock *sk;
 	struct inet_protosw *answer;
 	struct inet_sock *inet;
 	struct proto *answer_prot;
@@ -391,11 +390,7 @@ lookup_protocol:
 		if (err)
 			goto out_sk_release;
 	}
-
-	trace_android_rvh_inet_sock_create(sk);
-
 out:
-	trace_android_vh_inet_create(sk, err);
 	return err;
 out_rcu_unlock:
 	rcu_read_unlock();
@@ -421,8 +416,6 @@ int inet_release(struct socket *sock)
 
 		if (!sk->sk_kern_sock)
 			BPF_CGROUP_RUN_PROG_INET_SOCK_RELEASE(sk);
-
-		trace_android_rvh_inet_sock_release(sk);
 
 		/* Applications forget to leave groups before exiting */
 		ip_mc_drop_socket(sk);

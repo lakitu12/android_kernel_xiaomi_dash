@@ -5,7 +5,6 @@
 /*
  * ELF register definitions..
  */
-#include <linux/page_size_compat.h>
 #include <linux/thread_info.h>
 
 #include <asm/ptrace.h>
@@ -228,7 +227,7 @@ extern int force_personality32;
 #endif /* !CONFIG_X86_32 */
 
 #define CORE_DUMP_USE_REGSET
-#define ELF_EXEC_PAGESIZE	__PAGE_SIZE
+#define ELF_EXEC_PAGESIZE	4096
 
 /*
  * This is the base location for PIE (ET_DYN with INTERP) loads. On

@@ -483,7 +483,7 @@ static inline bool can_follow_write_pte(pte_t pte, struct page *page,
 		return false;
 
 	/* ... and a write-fault isn't required for other reasons. */
-	if (pte_needs_soft_dirty_wp(vma, pte))
+	if (vma_soft_dirty_enabled(vma) && !pte_soft_dirty(pte))
 		return false;
 	return !userfaultfd_pte_wp(vma, pte);
 }

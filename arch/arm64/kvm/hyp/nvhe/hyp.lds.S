@@ -16,10 +16,6 @@ SECTIONS {
 	HYP_SECTION(.text)
 	HYP_SECTION(.data..ro_after_init)
 	HYP_SECTION(.rodata)
-#ifdef CONFIG_TRACING
-	. = ALIGN(PAGE_SIZE);
-	HYP_SECTION(.event_ids)
-#endif
 
 	/*
 	 * .hyp..data..percpu needs to be page aligned to maintain the same
@@ -29,7 +25,5 @@ SECTIONS {
 	BEGIN_HYP_SECTION(.data..percpu)
 		PERCPU_INPUT(L1_CACHE_BYTES)
 	END_HYP_SECTION
-
 	HYP_SECTION(.bss)
-	HYP_SECTION(.data)
 }

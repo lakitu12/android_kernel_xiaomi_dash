@@ -180,7 +180,6 @@ out:
 	return true;
 #endif /* CONFIG_SMP */
 }
-EXPORT_SYMBOL_GPL(irq_work_queue_on);
 
 bool irq_work_needs_cpu(void)
 {

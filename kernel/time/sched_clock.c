@@ -17,7 +17,6 @@
 #include <linux/sched_clock.h>
 #include <linux/seqlock.h>
 #include <linux/bitops.h>
-#include <trace/hooks/epoch.h>
 
 #include "timekeeping.h"
 
@@ -108,11 +107,6 @@ unsigned long long notrace sched_clock(void)
 	return ns;
 }
 
-u64 notrace get_dup_sched_clock(void)
-{
-	return sched_clock();
-}
-EXPORT_SYMBOL_GPL(get_dup_sched_clock);
 /*
  * Updating the data required to read the clock.
  *
@@ -166,7 +160,8 @@ static enum hrtimer_restart sched_clock_poll(struct hrtimer *hrt)
 	return HRTIMER_RESTART;
 }
 
-void sched_clock_register(u64 (*read)(void), int bits, unsigned long rate)
+void __init
+sched_clock_register(u64 (*read)(void), int bits, unsigned long rate)
 {
 	u64 res, wrap, new_mask, new_epoch, cyc, ns;
 	u32 new_mult, new_shift;
@@ -238,7 +233,6 @@ void sched_clock_register(u64 (*read)(void), int bits, unsigned long rate)
 
 	pr_debug("Registered %pS as sched_clock source\n", read);
 }
-EXPORT_SYMBOL_GPL(sched_clock_register);
 
 void __init generic_sched_clock_init(void)
 {
@@ -285,7 +279,6 @@ int sched_clock_suspend(void)
 	update_sched_clock();
 	hrtimer_cancel(&sched_clock_timer);
 	rd->read_sched_clock = suspended_sched_clock_read;
-	trace_android_vh_show_suspend_epoch_val(rd->epoch_ns, rd->epoch_cyc);
 
 	return 0;
 }
@@ -297,7 +290,6 @@ void sched_clock_resume(void)
 	rd->epoch_cyc = cd.actual_read_sched_clock();
 	hrtimer_start(&sched_clock_timer, cd.wrap_kt, HRTIMER_MODE_REL_HARD);
 	rd->read_sched_clock = cd.actual_read_sched_clock;
-	trace_android_vh_show_resume_epoch_val(rd->epoch_cyc);
 }
 
 static struct syscore_ops sched_clock_ops = {

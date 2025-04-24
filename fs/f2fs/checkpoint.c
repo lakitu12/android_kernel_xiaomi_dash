@@ -20,21 +20,11 @@
 #include "segment.h"
 #include "iostat.h"
 #include <trace/events/f2fs.h>
-#include <trace/hooks/fs.h>
 
-EXPORT_TRACEPOINT_SYMBOL_GPL(f2fs_write_checkpoint);
-
-#define DEFAULT_CHECKPOINT_IOPRIO (IOPRIO_PRIO_VALUE(IOPRIO_CLASS_RT, 3))
+#define DEFAULT_CHECKPOINT_IOPRIO (IOPRIO_PRIO_VALUE(IOPRIO_CLASS_BE, 3))
 
 static struct kmem_cache *ino_entry_slab;
 struct kmem_cache *f2fs_inode_entry_slab;
-
-void _trace_android_rvh_f2fs_down_read(wait_queue_head_t *read_waiters,
-					struct rw_semaphore *rwsem, bool *skip)
-{
-	trace_android_rvh_f2fs_down_read(read_waiters, rwsem, skip);
-}
-EXPORT_SYMBOL_GPL(_trace_android_rvh_f2fs_down_read);
 
 void f2fs_stop_checkpoint(struct f2fs_sb_info *sbi, bool end_io,
 						unsigned char reason)
@@ -109,7 +99,7 @@ repeat:
 	}
 
 	if (unlikely(!PageUptodate(page))) {
-		f2fs_handle_page_eio(sbi, page_folio(page), META);
+		f2fs_handle_page_eio(sbi, page->index, META);
 		f2fs_put_page(page, 1);
 		return ERR_PTR(-EIO);
 	}
@@ -164,47 +154,49 @@ static bool __is_bitmap_valid(struct f2fs_sb_info *sbi, block_t blkaddr,
 	if (unlikely(f2fs_cp_error(sbi)))
 		return exist;
 
-	if ((exist && type == DATA_GENERIC_ENHANCE_UPDATE) ||
-		(!exist && type == DATA_GENERIC_ENHANCE))
-		goto out_err;
-	if (!exist && type != DATA_GENERIC_ENHANCE_UPDATE)
-		goto out_handle;
-	return exist;
+	if (exist && type == DATA_GENERIC_ENHANCE_UPDATE) {
+		f2fs_err(sbi, "Inconsistent error blkaddr:%u, sit bitmap:%d",
+			 blkaddr, exist);
+		set_sbi_flag(sbi, SBI_NEED_FSCK);
+		return exist;
+	}
 
-out_err:
-	f2fs_err(sbi, "Inconsistent error blkaddr:%u, sit bitmap:%d",
-		 blkaddr, exist);
-	set_sbi_flag(sbi, SBI_NEED_FSCK);
-	dump_stack();
-out_handle:
-	f2fs_handle_error(sbi, ERROR_INVALID_BLKADDR);
+	if (!exist && type == DATA_GENERIC_ENHANCE) {
+		f2fs_err(sbi, "Inconsistent error blkaddr:%u, sit bitmap:%d",
+			 blkaddr, exist);
+		set_sbi_flag(sbi, SBI_NEED_FSCK);
+		dump_stack();
+	}
 	return exist;
 }
 
-static bool __f2fs_is_valid_blkaddr(struct f2fs_sb_info *sbi,
+bool f2fs_is_valid_blkaddr(struct f2fs_sb_info *sbi,
 					block_t blkaddr, int type)
 {
+	if (time_to_inject(sbi, FAULT_BLKADDR))
+		return false;
+
 	switch (type) {
 	case META_NAT:
 		break;
 	case META_SIT:
 		if (unlikely(blkaddr >= SIT_BLK_CNT(sbi)))
-			goto check_only;
+			return false;
 		break;
 	case META_SSA:
 		if (unlikely(blkaddr >= MAIN_BLKADDR(sbi) ||
 			blkaddr < SM_I(sbi)->ssa_blkaddr))
-			goto check_only;
+			return false;
 		break;
 	case META_CP:
 		if (unlikely(blkaddr >= SIT_I(sbi)->sit_base_addr ||
 			blkaddr < __start_cp_addr(sbi)))
-			goto check_only;
+			return false;
 		break;
 	case META_POR:
 		if (unlikely(blkaddr >= MAX_BLKADDR(sbi) ||
 			blkaddr < MAIN_BLKADDR(sbi)))
-			goto check_only;
+			return false;
 		break;
 	case DATA_GENERIC:
 	case DATA_GENERIC_ENHANCE:
@@ -221,7 +213,7 @@ static bool __f2fs_is_valid_blkaddr(struct f2fs_sb_info *sbi,
 				  blkaddr);
 			set_sbi_flag(sbi, SBI_NEED_FSCK);
 			dump_stack();
-			goto err;
+			return false;
 		} else {
 			return __is_bitmap_valid(sbi, blkaddr, type);
 		}
@@ -229,31 +221,13 @@ static bool __f2fs_is_valid_blkaddr(struct f2fs_sb_info *sbi,
 	case META_GENERIC:
 		if (unlikely(blkaddr < SEG0_BLKADDR(sbi) ||
 			blkaddr >= MAIN_BLKADDR(sbi)))
-			goto err;
+			return false;
 		break;
 	default:
 		BUG();
 	}
 
 	return true;
-err:
-	f2fs_handle_error(sbi, ERROR_INVALID_BLKADDR);
-check_only:
-	return false;
-}
-
-bool f2fs_is_valid_blkaddr(struct f2fs_sb_info *sbi,
-					block_t blkaddr, int type)
-{
-	if (time_to_inject(sbi, FAULT_BLKADDR_VALIDITY))
-		return false;
-	return __f2fs_is_valid_blkaddr(sbi, blkaddr, type);
-}
-
-bool f2fs_is_valid_blkaddr_raw(struct f2fs_sb_info *sbi,
-					block_t blkaddr, int type)
-{
-	return __f2fs_is_valid_blkaddr(sbi, blkaddr, type);
 }
 
 /*
@@ -355,31 +329,30 @@ static int __f2fs_write_meta_page(struct page *page,
 				enum iostat_type io_type)
 {
 	struct f2fs_sb_info *sbi = F2FS_P_SB(page);
-	struct folio *folio = page_folio(page);
 
-	trace_f2fs_writepage(folio, META);
+	trace_f2fs_writepage(page, META);
 
 	if (unlikely(f2fs_cp_error(sbi))) {
 		if (is_sbi_flag_set(sbi, SBI_IS_CLOSE)) {
-			folio_clear_uptodate(folio);
+			ClearPageUptodate(page);
 			dec_page_count(sbi, F2FS_DIRTY_META);
-			folio_unlock(folio);
+			unlock_page(page);
 			return 0;
 		}
 		goto redirty_out;
 	}
 	if (unlikely(is_sbi_flag_set(sbi, SBI_POR_DOING)))
 		goto redirty_out;
-	if (wbc->for_reclaim && folio->index < GET_SUM_BLOCK(sbi, 0))
+	if (wbc->for_reclaim && page->index < GET_SUM_BLOCK(sbi, 0))
 		goto redirty_out;
 
-	f2fs_do_write_meta_page(sbi, folio, io_type);
+	f2fs_do_write_meta_page(sbi, page, io_type);
 	dec_page_count(sbi, F2FS_DIRTY_META);
 
 	if (wbc->for_reclaim)
 		f2fs_submit_merged_write_cond(sbi, NULL, page, 0, META);
 
-	folio_unlock(folio);
+	unlock_page(page);
 
 	if (unlikely(f2fs_cp_error(sbi)))
 		f2fs_submit_merged_write(sbi, META);
@@ -504,7 +477,7 @@ stop:
 static bool f2fs_dirty_meta_folio(struct address_space *mapping,
 		struct folio *folio)
 {
-	trace_f2fs_set_page_dirty(folio, META);
+	trace_f2fs_set_page_dirty(&folio->page, META);
 
 	if (!folio_test_uptodate(folio))
 		folio_mark_uptodate(folio);
@@ -1553,7 +1526,7 @@ static int do_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 		blk = start_blk + BLKS_PER_SEG(sbi) - nm_i->nat_bits_blocks;
 		for (i = 0; i < nm_i->nat_bits_blocks; i++)
 			f2fs_update_meta_page(sbi, nm_i->nat_bits +
-					F2FS_BLK_TO_BYTES(i), blk + i);
+					(i << F2FS_BLKSIZE_BITS), blk + i);
 	}
 
 	/* write out checkpoint buffer at block 0 */
@@ -1720,7 +1693,6 @@ int f2fs_write_checkpoint(struct f2fs_sb_info *sbi, struct cp_control *cpc)
 	}
 
 	f2fs_restore_inmem_curseg(sbi);
-	f2fs_reinit_atgc_curseg(sbi);
 	stat_inc_cp_count(sbi);
 stop:
 	unblock_operations(sbi);
@@ -1896,18 +1868,10 @@ int f2fs_issue_checkpoint(struct f2fs_sb_info *sbi)
 	if (waitqueue_active(&cprc->ckpt_wait_queue))
 		wake_up(&cprc->ckpt_wait_queue);
 
-	if (cprc->f2fs_issue_ckpt) {
-		bool prio_changed = false;
-		int saved_prio;
-
-		trace_android_vh_f2fs_improve_priority(cprc->f2fs_issue_ckpt, &saved_prio,
-						&prio_changed);
+	if (cprc->f2fs_issue_ckpt)
 		wait_for_completion(&req.wait);
-		if (prio_changed)
-			trace_android_vh_f2fs_restore_priority(cprc->f2fs_issue_ckpt, saved_prio);
-	} else {
+	else
 		flush_remained_ckpt_reqs(sbi, &req);
-	}
 
 	return req.ret;
 }

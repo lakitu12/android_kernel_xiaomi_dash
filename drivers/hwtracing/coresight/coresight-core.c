@@ -574,7 +574,7 @@ int coresight_enable_path(struct list_head *path, enum cs_mode mode,
 		/* Enable all helpers adjacent to the path first */
 		ret = coresight_enable_helpers(csdev, mode, sink_data);
 		if (ret)
-			goto err_disable_path;
+			goto err;
 		/*
 		 * ETF devices are tricky... They can be a link or a sink,
 		 * depending on how they are configured.  If an ETF has been
@@ -595,10 +595,8 @@ int coresight_enable_path(struct list_head *path, enum cs_mode mode,
 			 * that need disabling. Disabling the path here
 			 * would mean we could disrupt an existing session.
 			 */
-			if (ret) {
-				coresight_disable_helpers(csdev);
+			if (ret)
 				goto out;
-			}
 			break;
 		case CORESIGHT_DEV_TYPE_SOURCE:
 			/* sources are enabled from either sysFS or Perf */
@@ -608,19 +606,16 @@ int coresight_enable_path(struct list_head *path, enum cs_mode mode,
 			child = list_next_entry(nd, link)->csdev;
 			ret = coresight_enable_link(csdev, parent, child);
 			if (ret)
-				goto err_disable_helpers;
+				goto err;
 			break;
 		default:
-			ret = -EINVAL;
-			goto err_disable_helpers;
+			goto err;
 		}
 	}
 
 out:
 	return ret;
-err_disable_helpers:
-	coresight_disable_helpers(csdev);
-err_disable_path:
+err:
 	coresight_disable_path_from(path, nd);
 	goto out;
 }

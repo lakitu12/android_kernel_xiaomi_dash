@@ -153,7 +153,6 @@
 #include <linux/prandom.h>
 #include <linux/once_lite.h>
 #include <net/netdev_rx_queue.h>
-#include <trace/hooks/net.h>
 
 #include "dev.h"
 #include "net-sysfs.h"
@@ -552,12 +551,6 @@ static inline void netdev_set_addr_lockdep_class(struct net_device *dev)
 
 static inline struct list_head *ptype_head(const struct packet_type *pt)
 {
-	struct list_head vendor_pt = { .next  = NULL, };
-
-	trace_android_vh_ptype_head(pt, &vendor_pt);
-	if (vendor_pt.next)
-		return vendor_pt.next;
-
 	if (pt->type == htons(ETH_P_ALL))
 		return pt->dev ? &pt->dev->ptype_all : &ptype_all;
 	else
@@ -960,7 +953,6 @@ out:
 	up_read(&devnet_rename_sem);
 	return ret;
 }
-EXPORT_SYMBOL_GPL(netdev_get_name);
 
 static bool dev_addr_cmp(struct net_device *dev, unsigned short type,
 			 const char *ha)
@@ -3612,9 +3604,6 @@ static int xmit_one(struct sk_buff *skb, struct net_device *dev,
 
 	len = skb->len;
 	trace_net_dev_start_xmit(skb, dev);
-
-	trace_android_vh_dc_send_copy(skb, dev);
-
 	rc = netdev_start_xmit(skb, dev, txq, more);
 	trace_net_dev_xmit(skb, rc, dev, len);
 
@@ -5402,7 +5391,6 @@ static int __netif_receive_skb_core(struct sk_buff **pskb, bool pfmemalloc,
 	bool deliver_exact = false;
 	int ret = NET_RX_DROP;
 	__be16 type;
-	int flag = 0;
 
 	net_timestamp_check(!READ_ONCE(netdev_tstamp_prequeue), skb);
 
@@ -5421,10 +5409,6 @@ another_round:
 	skb->skb_iif = skb->dev->ifindex;
 
 	__this_cpu_inc(softnet_data.processed);
-
-	trace_android_vh_dc_receive(skb, &flag);
-	if (flag != 0)
-		return NET_RX_DROP;
 
 	if (static_branch_unlikely(&generic_xdp_needed_key)) {
 		int ret2;

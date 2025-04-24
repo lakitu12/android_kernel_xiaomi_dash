@@ -2753,9 +2753,6 @@ __call_rcu_common(struct rcu_head *head, rcu_callback_t func, bool lazy_in)
 }
 
 #ifdef CONFIG_RCU_LAZY
-static bool enable_rcu_lazy __read_mostly = !IS_ENABLED(CONFIG_RCU_LAZY_DEFAULT_OFF);
-module_param(enable_rcu_lazy, bool, 0444);
-
 /**
  * call_rcu_hurry() - Queue RCU callback for invocation after grace period, and
  * flush all lazy callbacks (including the new one) to the main ->cblist while
@@ -2781,8 +2778,6 @@ void call_rcu_hurry(struct rcu_head *head, rcu_callback_t func)
 	return __call_rcu_common(head, func, false);
 }
 EXPORT_SYMBOL_GPL(call_rcu_hurry);
-#else
-#define enable_rcu_lazy		false
 #endif
 
 /**
@@ -2831,7 +2826,7 @@ EXPORT_SYMBOL_GPL(call_rcu_hurry);
  */
 void call_rcu(struct rcu_head *head, rcu_callback_t func)
 {
-	__call_rcu_common(head, func, enable_rcu_lazy);
+	return __call_rcu_common(head, func, IS_ENABLED(CONFIG_RCU_LAZY));
 }
 EXPORT_SYMBOL_GPL(call_rcu);
 

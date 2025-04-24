@@ -424,7 +424,6 @@ struct task_struct *find_task_by_vpid(pid_t vnr)
 {
 	return find_task_by_pid_ns(vnr, task_active_pid_ns(current));
 }
-EXPORT_SYMBOL_GPL(find_task_by_vpid);
 
 struct task_struct *find_get_task_by_vpid(pid_t nr)
 {
@@ -543,7 +542,6 @@ struct pid *pidfd_get_pid(unsigned int fd, unsigned int *flags)
 	fdput(f);
 	return pid;
 }
-EXPORT_SYMBOL_GPL(pidfd_get_pid);
 
 /**
  * pidfd_get_task() - Get the task associated with a pidfd

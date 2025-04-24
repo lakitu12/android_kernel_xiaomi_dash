@@ -13,7 +13,7 @@
  * configuration option for this feature.
  * People who want to use this will need to modify the source code directly.
  */
-#define INTERCONNECT_ALLOW_WRITE_DEBUGFS
+#undef INTERCONNECT_ALLOW_WRITE_DEBUGFS
 
 #if defined(INTERCONNECT_ALLOW_WRITE_DEBUGFS) && defined(CONFIG_DEBUG_FS)
 

@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/blkdev.h>
 #include <linux/slab.h>
-#include <trace/hooks/blk.h>
 
 struct bd_holder_disk {
 	struct list_head	list;
@@ -108,7 +107,6 @@ int bd_link_disk_holder(struct block_device *bdev, struct gendisk *disk)
 	if (ret)
 		goto out_del_symlink;
 	list_add(&holder->list, &disk->slave_bdevs);
-	trace_android_vh_bd_link_disk_holder(bdev, disk);
 
 	mutex_unlock(&disk->open_mutex);
 	return 0;

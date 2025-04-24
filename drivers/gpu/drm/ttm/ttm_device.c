@@ -95,17 +95,11 @@ static int ttm_global_init(void)
 	ttm_pool_mgr_init(num_pages);
 	ttm_tt_mgr_init(num_pages, num_dma32);
 
-	glob->dummy_read_page = alloc_page(__GFP_ZERO | GFP_DMA32 |
-					   __GFP_NOWARN);
+	glob->dummy_read_page = alloc_page(__GFP_ZERO | GFP_DMA32);
 
-	/* Retry without GFP_DMA32 for platforms DMA32 is not available */
 	if (unlikely(glob->dummy_read_page == NULL)) {
-		glob->dummy_read_page = alloc_page(__GFP_ZERO);
-		if (unlikely(glob->dummy_read_page == NULL)) {
-			ret = -ENOMEM;
-			goto out;
-		}
-		pr_warn("Using GFP_DMA32 fallback for dummy_read_page\n");
+		ret = -ENOMEM;
+		goto out;
 	}
 
 	INIT_LIST_HEAD(&glob->device_list);

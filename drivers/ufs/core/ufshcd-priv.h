@@ -6,22 +6,6 @@
 #include <linux/pm_runtime.h>
 #include <ufs/ufshcd.h>
 
-/*
- * @rtt_cap -  bDeviceRTTCap
- * @nortt - Max outstanding RTTs supported by controller
- */
-struct ufs_hba_priv {
-	struct ufs_hba hba;
-	struct completion dev_cmd_compl;
-	u8 rtt_cap;
-	int nortt;
-};
-
-static inline struct ufs_hba_priv *to_hba_priv(struct ufs_hba *hba)
-{
-	return container_of(hba, struct ufs_hba_priv, hba);
-}
-
 static inline bool ufshcd_is_user_access_allowed(struct ufs_hba *hba)
 {
 	return !hba->shutting_down;
@@ -258,12 +242,6 @@ static inline void ufshcd_vops_config_scaling_param(struct ufs_hba *hba,
 		hba->vops->config_scaling_param(hba, p, data);
 }
 
-static inline void ufshcd_vops_reinit_notify(struct ufs_hba *hba)
-{
-	if (hba->vops && hba->vops->reinit_notify)
-		hba->vops->reinit_notify(hba);
-}
-
 static inline int ufshcd_vops_mcq_config_resource(struct ufs_hba *hba)
 {
 	if (hba->vops && hba->vops->mcq_config_resource)
@@ -344,6 +322,11 @@ static inline int ufshcd_update_ee_usr_mask(struct ufs_hba *hba,
 static inline int ufshcd_rpm_get_sync(struct ufs_hba *hba)
 {
 	return pm_runtime_get_sync(&hba->ufs_device_wlun->sdev_gendev);
+}
+
+static inline int ufshcd_rpm_get_if_active(struct ufs_hba *hba)
+{
+	return pm_runtime_get_if_active(&hba->ufs_device_wlun->sdev_gendev, true);
 }
 
 static inline int ufshcd_rpm_put_sync(struct ufs_hba *hba)

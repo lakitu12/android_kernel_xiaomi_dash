@@ -29,7 +29,6 @@
 #include <linux/page_owner.h>
 #include <linux/sched/isolation.h>
 
-#include <trace/hooks/mm.h>
 #include "internal.h"
 
 #ifdef CONFIG_NUMA
@@ -1164,7 +1163,6 @@ int fragmentation_index(struct zone *zone, unsigned int order)
 
 #define TEXTS_FOR_ZONES(xx) TEXT_FOR_DMA(xx) TEXT_FOR_DMA32(xx) xx "_normal", \
 					TEXT_FOR_HIGHMEM(xx) xx "_movable", \
-					xx "_nosplit", xx "_nomerge", \
 					TEXT_FOR_DEVICE(xx)
 
 const char * const vmstat_text[] = {
@@ -1178,7 +1176,9 @@ const char * const vmstat_text[] = {
 	"nr_zone_write_pending",
 	"nr_mlock",
 	"nr_bounce",
+#if IS_ENABLED(CONFIG_ZSMALLOC)
 	"nr_zspages",
+#endif
 	"nr_free_cma",
 #ifdef CONFIG_UNACCEPTED_MEMORY
 	"nr_unaccepted",
@@ -1358,11 +1358,7 @@ const char * const vmstat_text[] = {
 	"thp_split_page",
 	"thp_split_page_failed",
 	"thp_deferred_split_page",
-	"thp_underused_split_page",
 	"thp_split_pmd",
-	"thp_shatter_page",
-	"thp_shatter_page_failed",
-	"thp_shatter_page_discarded",
 	"thp_scan_exceed_none_pte",
 	"thp_scan_exceed_swap_pte",
 	"thp_scan_exceed_share_pte",
@@ -1641,7 +1637,6 @@ static int pagetypeinfo_show(struct seq_file *m, void *arg)
 	pagetypeinfo_showfree(m, pgdat);
 	pagetypeinfo_showblockcount(m, pgdat);
 	pagetypeinfo_showmixedcount(m, pgdat);
-	trace_android_vh_pagetypeinfo_show(m);
 
 	return 0;
 }
@@ -1699,8 +1694,7 @@ static void zoneinfo_show_print(struct seq_file *m, pg_data_t *pgdat,
 		   "\n        spanned  %lu"
 		   "\n        present  %lu"
 		   "\n        managed  %lu"
-		   "\n        cma      %lu"
-		   "\n        order    %u",
+		   "\n        cma      %lu",
 		   zone_page_state(zone, NR_FREE_PAGES),
 		   zone->watermark_boost,
 		   min_wmark_pages(zone),
@@ -1709,8 +1703,7 @@ static void zoneinfo_show_print(struct seq_file *m, pg_data_t *pgdat,
 		   zone->spanned_pages,
 		   zone->present_pages,
 		   zone_managed_pages(zone),
-		   zone_cma_pages(zone),
-		   zone->order);
+		   zone_cma_pages(zone));
 
 	seq_printf(m,
 		   "\n        protection: (%ld",

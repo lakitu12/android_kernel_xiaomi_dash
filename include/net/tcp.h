@@ -40,9 +40,7 @@
 #include <net/inet_ecn.h>
 #include <net/dst.h>
 #include <net/mptcp.h>
-#ifndef __GENKSYMS__
 #include <net/xfrm.h>
-#endif
 
 #include <linux/seq_file.h>
 #include <linux/memcontrol.h>

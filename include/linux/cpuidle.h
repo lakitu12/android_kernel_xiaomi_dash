@@ -15,7 +15,6 @@
 #include <linux/list.h>
 #include <linux/hrtimer.h>
 #include <linux/context_tracking.h>
-#include <linux/android_kabi.h>
 
 #define CPUIDLE_STATE_MAX	10
 #define CPUIDLE_NAME_LEN	16
@@ -112,8 +111,6 @@ struct cpuidle_device {
 	cpumask_t		coupled_cpus;
 	struct cpuidle_coupled	*coupled;
 #endif
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 DECLARE_PER_CPU(struct cpuidle_device *, cpuidle_devices);
@@ -168,8 +165,6 @@ struct cpuidle_driver {
 
 	/* preferred governor to switch at register time */
 	const char		*governor;
-
-	ANDROID_KABI_RESERVE(1);
 };
 
 #ifdef CONFIG_CPU_IDLE
@@ -353,13 +348,5 @@ extern s64 cpuidle_governor_latency_req(unsigned int cpu);
 
 #define CPU_PM_CPU_IDLE_ENTER_RETENTION_PARAM_RCU(low_level_idle_enter, idx, state)	\
 	__CPU_PM_CPU_IDLE_ENTER(low_level_idle_enter, idx, state, 1, 1)
-
-#ifdef CONFIG_CPU_IDLE_GOV_TEO
-unsigned long teo_cpu_get_util_threshold(int cpu);
-void teo_cpu_set_util_threshold(int cpu, unsigned long util);
-#else
-static inline unsigned long teo_cpu_get_util_threshold(int cpu) {return -1;}
-static inline void teo_cpu_set_util_threshold(int cpu, unsigned long util) {}
-#endif
 
 #endif /* _LINUX_CPUIDLE_H */

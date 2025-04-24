@@ -21,8 +21,6 @@
 #include <linux/of.h>
 #include <linux/suspend.h>
 
-#include <trace/hooks/thermal.h>
-
 #define CREATE_TRACE_POINTS
 #include "thermal_trace.h"
 
@@ -807,7 +805,7 @@ static void thermal_release(struct device *dev)
 		tz = to_thermal_zone(dev);
 		thermal_zone_destroy_device_groups(tz);
 		mutex_destroy(&tz->lock);
-		kfree(tz);
+		complete(&tz->removal);
 	} else if (!strncmp(dev_name(dev), "cooling_device",
 			    sizeof("cooling_device") - 1)) {
 		cdev = to_cooling_device(dev);
@@ -1302,6 +1300,7 @@ thermal_zone_device_register_with_trips(const char *type, struct thermal_trip *t
 	INIT_LIST_HEAD(&tz->node);
 	ida_init(&tz->ida);
 	mutex_init(&tz->lock);
+	init_completion(&tz->removal);
 	id = ida_alloc(&thermal_tz_ida, GFP_KERNEL);
 	if (id < 0) {
 		result = id;
@@ -1485,12 +1484,13 @@ void thermal_zone_device_unregister(struct thermal_zone_device *tz)
 	ida_destroy(&tz->ida);
 
 	device_del(&tz->device);
-
-	kfree(tz->tzp);
-
 	put_device(&tz->device);
 
 	thermal_notify_tz_delete(tz_id);
+
+	wait_for_completion(&tz->removal);
+	kfree(tz->tzp);
+	kfree(tz);
 }
 EXPORT_SYMBOL_GPL(thermal_zone_device_unregister);
 
@@ -1536,7 +1536,6 @@ static int thermal_pm_notify(struct notifier_block *nb,
 			     unsigned long mode, void *_unused)
 {
 	struct thermal_zone_device *tz;
-	int irq_wakeable = 0;
 
 	switch (mode) {
 	case PM_HIBERNATION_PREPARE:
@@ -1546,12 +1545,6 @@ static int thermal_pm_notify(struct notifier_block *nb,
 
 		list_for_each_entry(tz, &thermal_tz_list, node) {
 			mutex_lock(&tz->lock);
-
-			trace_android_vh_thermal_pm_notify_suspend(tz, &irq_wakeable);
-			if (irq_wakeable) {
-				mutex_unlock(&tz->lock);
-				continue;
-			}
 
 			tz->suspended = true;
 
@@ -1567,12 +1560,6 @@ static int thermal_pm_notify(struct notifier_block *nb,
 
 		list_for_each_entry(tz, &thermal_tz_list, node) {
 			mutex_lock(&tz->lock);
-
-			trace_android_vh_thermal_pm_notify_suspend(tz, &irq_wakeable);
-			if (irq_wakeable) {
-				mutex_unlock(&tz->lock);
-				continue;
-			}
 
 			tz->suspended = false;
 

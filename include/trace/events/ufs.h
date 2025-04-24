@@ -18,9 +18,7 @@
 		{ READ_16,		"READ_16" },			\
 		{ READ_10,		"READ_10" },			\
 		{ SYNCHRONIZE_CACHE,	"SYNC" },			\
-		{ UNMAP,		"UNMAP" },			\
-		{ ZBC_IN,		"ZBC_IN" },			\
-		{ ZBC_OUT,		"ZBC_OUT" })
+		{ UNMAP,		"UNMAP" })
 
 #define UFS_LINK_STATES						\
 	EM(UIC_LINK_OFF_STATE,		"UIC_LINK_OFF_STATE")		\
