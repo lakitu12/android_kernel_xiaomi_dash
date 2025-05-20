@@ -29,6 +29,7 @@
 #include <linux/rcupdate_trace.h>
 #include <linux/static_call.h>
 #include <linux/memcontrol.h>
+#include <linux/android_kabi.h>
 
 struct bpf_verifier_env;
 struct bpf_verifier_log;
@@ -172,6 +173,9 @@ struct bpf_map_ops {
 
 	/* bpf_iter info used to open a seq_file */
 	const struct bpf_iter_seq_info *iter_seq_info;
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
 };
 
 enum {
@@ -288,7 +292,6 @@ struct bpf_map {
 	 * same prog type, JITed flag and xdp_has_frags flag.
 	 */
 	struct {
-		const struct btf_type *attach_func_proto;
 		spinlock_t lock;
 		enum bpf_prog_type type;
 		bool jited;
@@ -297,8 +300,6 @@ struct bpf_map {
 	bool bypass_spec_v1;
 	bool frozen; /* write-once; write-protected by freeze_mutex */
 	bool free_after_mult_rcu_gp;
-	bool free_after_rcu_gp;
-	atomic64_t sleepable_refcnt;
 	s64 __percpu *elem_count;
 };
 
@@ -536,6 +537,8 @@ struct bpf_map_dev_ops {
 	int (*map_update_elem)(struct bpf_offloaded_map *map,
 			       void *key, void *value, u64 flags);
 	int (*map_delete_elem)(struct bpf_offloaded_map *map, void *key);
+
+	ANDROID_KABI_RESERVE(1);
 };
 
 struct bpf_offloaded_map {
@@ -616,7 +619,6 @@ enum bpf_type_flag {
 	 */
 	PTR_UNTRUSTED		= BIT(6 + BPF_BASE_TYPE_BITS),
 
-	/* MEM can be uninitialized. */
 	MEM_UNINIT		= BIT(7 + BPF_BASE_TYPE_BITS),
 
 	/* DYNPTR points to memory local to the bpf program. */
@@ -677,18 +679,6 @@ enum bpf_type_flag {
 	/* DYNPTR points to xdp_buff */
 	DYNPTR_TYPE_XDP		= BIT(16 + BPF_BASE_TYPE_BITS),
 
-	/* Memory must be aligned on some architectures, used in combination with
-	 * MEM_FIXED_SIZE.
-	 */
-	MEM_ALIGNED		= BIT(17 + BPF_BASE_TYPE_BITS),
-
-	/* MEM is being written to, often combined with MEM_UNINIT. Non-presence
-	 * of MEM_WRITE means that MEM is only being read. MEM_WRITE without the
-	 * MEM_UNINIT means that memory needs to be initialized since it is also
-	 * read.
-	 */
-	MEM_WRITE		= BIT(18 + BPF_BASE_TYPE_BITS),
-
 	__BPF_TYPE_FLAG_MAX,
 	__BPF_TYPE_LAST_FLAG	= __BPF_TYPE_FLAG_MAX - 1,
 };
@@ -725,6 +715,8 @@ enum bpf_arg_type {
 	ARG_ANYTHING,		/* any (initialized) argument is ok */
 	ARG_PTR_TO_SPIN_LOCK,	/* pointer to bpf_spin_lock */
 	ARG_PTR_TO_SOCK_COMMON,	/* pointer to sock_common */
+	ARG_PTR_TO_INT,		/* pointer to int */
+	ARG_PTR_TO_LONG,	/* pointer to long */
 	ARG_PTR_TO_SOCKET,	/* pointer to bpf_sock (fullsock) */
 	ARG_PTR_TO_BTF_ID,	/* pointer to in-kernel struct */
 	ARG_PTR_TO_RINGBUF_MEM,	/* pointer to dynamically reserved ringbuf memory */
@@ -746,10 +738,10 @@ enum bpf_arg_type {
 	ARG_PTR_TO_SOCKET_OR_NULL	= PTR_MAYBE_NULL | ARG_PTR_TO_SOCKET,
 	ARG_PTR_TO_STACK_OR_NULL	= PTR_MAYBE_NULL | ARG_PTR_TO_STACK,
 	ARG_PTR_TO_BTF_ID_OR_NULL	= PTR_MAYBE_NULL | ARG_PTR_TO_BTF_ID,
-	/* Pointer to memory does not need to be initialized, since helper function
-	 * fills all bytes or clears them in error case.
+	/* pointer to memory does not need to be initialized, helper function must fill
+	 * all bytes or clear them in error case.
 	 */
-	ARG_PTR_TO_UNINIT_MEM		= MEM_UNINIT | MEM_WRITE | ARG_PTR_TO_MEM,
+	ARG_PTR_TO_UNINIT_MEM		= MEM_UNINIT | ARG_PTR_TO_MEM,
 	/* Pointer to valid memory of size known at compile time. */
 	ARG_PTR_TO_FIXED_SIZE_MEM	= MEM_FIXED_SIZE | ARG_PTR_TO_MEM,
 
@@ -965,6 +957,7 @@ struct bpf_verifier_ops {
 	int (*btf_struct_access)(struct bpf_verifier_log *log,
 				 const struct bpf_reg_state *reg,
 				 int off, int size);
+	ANDROID_KABI_RESERVE(1);
 };
 
 struct bpf_prog_offload_ops {
@@ -980,6 +973,7 @@ struct bpf_prog_offload_ops {
 	int (*prepare)(struct bpf_prog *prog);
 	int (*translate)(struct bpf_prog *prog);
 	void (*destroy)(struct bpf_prog *prog);
+	ANDROID_KABI_RESERVE(1);
 };
 
 struct bpf_prog_offload {
@@ -992,6 +986,7 @@ struct bpf_prog_offload {
 	bool			opt_failed;
 	void			*jited_image;
 	u32			jited_len;
+	ANDROID_KABI_RESERVE(1);
 };
 
 enum bpf_cgroup_storage_type {
@@ -1172,6 +1167,7 @@ struct bpf_trampoline {
 	/* Executable image of trampoline */
 	struct bpf_tramp_image *cur_image;
 	struct module *mod;
+	ANDROID_KABI_RESERVE(1);
 };
 
 struct bpf_attach_target_info {
@@ -1203,6 +1199,7 @@ struct bpf_dispatcher {
 	struct static_call_key *sc_key;
 	void *sc_tramp;
 #endif
+	ANDROID_KABI_RESERVE(1);
 };
 
 static __always_inline __nocfi unsigned int bpf_dispatcher_nop_func(
@@ -1488,6 +1485,7 @@ struct bpf_prog_aux {
 		struct work_struct work;
 		struct rcu_head	rcu;
 	};
+	ANDROID_KABI_RESERVE(1);
 };
 
 struct bpf_prog {
@@ -1517,6 +1515,7 @@ struct bpf_prog {
 					    const struct bpf_insn *insn);
 	struct bpf_prog_aux	*aux;		/* Auxiliary fields */
 	struct sock_fprog_kern	*orig_prog;	/* Original BPF program */
+	ANDROID_KABI_RESERVE(1);
 	/* Instructions for interpreter */
 	union {
 		DECLARE_FLEX_ARRAY(struct sock_filter, insns);
@@ -1566,6 +1565,7 @@ struct bpf_link_ops {
 			      struct bpf_link_info *info);
 	int (*update_map)(struct bpf_link *link, struct bpf_map *new_map,
 			  struct bpf_map *old_map);
+	ANDROID_KABI_RESERVE(1);
 };
 
 struct bpf_tramp_link {
@@ -1663,6 +1663,7 @@ struct bpf_struct_ops {
 	struct btf_func_model func_models[BPF_STRUCT_OPS_MAX_NR_MEMBERS];
 	u32 type_id;
 	u32 value_id;
+	ANDROID_KABI_RESERVE(1);
 };
 
 #if defined(CONFIG_BPF_JIT) && defined(CONFIG_BPF_SYSCALL)

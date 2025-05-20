@@ -46,6 +46,7 @@
 #include <linux/filter.h>
 #include <linux/namei.h>
 #include <linux/parser.h>
+#include <linux/page_size_compat.h>
 #include <linux/sched/clock.h>
 #include <linux/sched/mm.h>
 #include <linux/proc_ns.h>
@@ -55,7 +56,7 @@
 #include <linux/pgtable.h>
 #include <linux/buildid.h>
 #include <linux/task_work.h>
-
+#include <trace/hooks/perf.h>
 #include "internal.h"
 
 #include <asm/irq_regs.h>
@@ -1259,9 +1260,8 @@ static void put_ctx(struct perf_event_context *ctx)
  *	  perf_event_context::mutex
  *	    perf_event::child_mutex;
  *	      perf_event_context::lock
+ *	    perf_event::mmap_mutex
  *	    mmap_lock
- *	      perf_event::mmap_mutex
- *	        perf_buffer::aux_mutex
  *	      perf_addr_filters_head::lock
  *
  *    cpu_hotplug_lock
@@ -2293,6 +2293,7 @@ event_sched_out(struct perf_event *event, struct perf_event_context *ctx)
 		if (state != PERF_EVENT_STATE_OFF &&
 		    !event->pending_work &&
 		    !task_work_add(current, &event->pending_task, TWA_RESUME)) {
+			WARN_ON_ONCE(!atomic_long_inc_not_zero(&event->refcount));
 			event->pending_work = 1;
 		} else {
 			local_dec(&event->ctx->nr_pending);
@@ -4297,6 +4298,8 @@ static bool perf_rotate_context(struct perf_cpu_pmu_context *cpc)
 	perf_ctx_lock(cpuctx, cpuctx->task_ctx);
 	perf_pmu_disable(pmu);
 
+	trace_android_rvh_perf_rotate_context(cpc);
+
 	if (task_rotate)
 		task_event = ctx_event_to_rotate(task_epc);
 	if (cpu_rotate)
@@ -4629,6 +4632,7 @@ out:
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(perf_event_read_local);
 
 static int perf_event_read(struct perf_event *event, bool group)
 {
@@ -5192,35 +5196,9 @@ static bool exclusive_event_installable(struct perf_event *event,
 static void perf_addr_filters_splice(struct perf_event *event,
 				       struct list_head *head);
 
-static void perf_pending_task_sync(struct perf_event *event)
-{
-	struct callback_head *head = &event->pending_task;
-
-	if (!event->pending_work)
-		return;
-	/*
-	 * If the task is queued to the current task's queue, we
-	 * obviously can't wait for it to complete. Simply cancel it.
-	 */
-	if (task_work_cancel(current, head)) {
-		event->pending_work = 0;
-		local_dec(&event->ctx->nr_pending);
-		return;
-	}
-
-	/*
-	 * All accesses related to the event are within the same
-	 * non-preemptible section in perf_pending_task(). The RCU
-	 * grace period before the event is freed will make sure all
-	 * those accesses are complete by then.
-	 */
-	rcuwait_wait_event(&event->pending_work_wait, !event->pending_work, TASK_UNINTERRUPTIBLE);
-}
-
 static void _free_event(struct perf_event *event)
 {
 	irq_work_sync(&event->pending_irq);
-	perf_pending_task_sync(event);
 
 	unaccount_event(event);
 
@@ -6374,11 +6352,12 @@ static void perf_mmap_close(struct vm_area_struct *vma)
 		event->pmu->event_unmapped(event, vma->vm_mm);
 
 	/*
-	 * The AUX buffer is strictly a sub-buffer, serialize using aux_mutex
-	 * to avoid complications.
+	 * rb->aux_mmap_count will always drop before rb->mmap_count and
+	 * event->mmap_count, so it is ok to use event->mmap_mutex to
+	 * serialize with perf_mmap here.
 	 */
 	if (rb_has_aux(rb) && vma->vm_pgoff == rb->aux_pgoff &&
-	    atomic_dec_and_mutex_lock(&rb->aux_mmap_count, &rb->aux_mutex)) {
+	    atomic_dec_and_mutex_lock(&rb->aux_mmap_count, &event->mmap_mutex)) {
 		/*
 		 * Stop all AUX events that are writing to this buffer,
 		 * so that we can free its AUX pages and corresponding PMU
@@ -6395,7 +6374,7 @@ static void perf_mmap_close(struct vm_area_struct *vma)
 		rb_free_aux(rb);
 		WARN_ON_ONCE(refcount_read(&rb->aux_refcount));
 
-		mutex_unlock(&rb->aux_mutex);
+		mutex_unlock(&event->mmap_mutex);
 	}
 
 	if (atomic_dec_and_test(&rb->mmap_count))
@@ -6483,7 +6462,6 @@ static int perf_mmap(struct file *file, struct vm_area_struct *vma)
 	struct perf_event *event = file->private_data;
 	unsigned long user_locked, user_lock_limit;
 	struct user_struct *user = current_user();
-	struct mutex *aux_mutex = NULL;
 	struct perf_buffer *rb = NULL;
 	unsigned long locked, lock_limit;
 	unsigned long vma_size;
@@ -6509,7 +6487,7 @@ static int perf_mmap(struct file *file, struct vm_area_struct *vma)
 	vma_size = vma->vm_end - vma->vm_start;
 
 	if (vma->vm_pgoff == 0) {
-		nr_pages = (vma_size / PAGE_SIZE) - 1;
+		nr_pages = (vma_size / PAGE_SIZE) - (__PAGE_SIZE / PAGE_SIZE);
 	} else {
 		/*
 		 * AUX area mapping: if rb->aux_nr_pages != 0, it's already
@@ -6531,9 +6509,6 @@ static int perf_mmap(struct file *file, struct vm_area_struct *vma)
 		rb = event->rb;
 		if (!rb)
 			goto aux_unlock;
-
-		aux_mutex = &rb->aux_mutex;
-		mutex_lock(aux_mutex);
 
 		aux_offset = READ_ONCE(rb->user_page->aux_offset);
 		aux_size = READ_ONCE(rb->user_page->aux_size);
@@ -6580,7 +6555,7 @@ static int perf_mmap(struct file *file, struct vm_area_struct *vma)
 	if (nr_pages != 0 && !is_power_of_2(nr_pages))
 		return -EINVAL;
 
-	if (vma_size != PAGE_SIZE * (1 + nr_pages))
+	if (vma_size != PAGE_SIZE * ((__PAGE_SIZE / PAGE_SIZE) + nr_pages))
 		return -EINVAL;
 
 	WARN_ON_ONCE(event->ctx->parent_ctx);
@@ -6685,8 +6660,6 @@ unlock:
 		atomic_dec(&rb->mmap_count);
 	}
 aux_unlock:
-	if (aux_mutex)
-		mutex_unlock(aux_mutex);
 	mutex_unlock(&event->mmap_mutex);
 
 	/*
@@ -6860,35 +6833,27 @@ static void perf_pending_task(struct callback_head *head)
 	int rctx;
 
 	/*
-	 * All accesses to the event must belong to the same implicit RCU read-side
-	 * critical section as the ->pending_work reset. See comment in
-	 * perf_pending_task_sync().
-	 */
-	preempt_disable_notrace();
-	/*
 	 * If we 'fail' here, that's OK, it means recursion is already disabled
 	 * and we won't recurse 'further'.
 	 */
+	preempt_disable_notrace();
 	rctx = perf_swevent_get_recursion_context();
 
 	if (event->pending_work) {
 		event->pending_work = 0;
 		perf_sigtrap(event);
 		local_dec(&event->ctx->nr_pending);
-		rcuwait_wake_up(&event->pending_work_wait);
 	}
 
 	if (rctx >= 0)
 		perf_swevent_put_recursion_context(rctx);
 	preempt_enable_notrace();
+
+	put_event(event);
 }
 
 #ifdef CONFIG_GUEST_PERF_EVENTS
 struct perf_guest_info_callbacks __rcu *perf_guest_cbs;
-
-DEFINE_STATIC_CALL_RET0(__perf_guest_state, *perf_guest_cbs->state);
-DEFINE_STATIC_CALL_RET0(__perf_guest_get_ip, *perf_guest_cbs->get_ip);
-DEFINE_STATIC_CALL_RET0(__perf_guest_handle_intel_pt_intr, *perf_guest_cbs->handle_intel_pt_intr);
 
 void perf_register_guest_info_callbacks(struct perf_guest_info_callbacks *cbs)
 {
@@ -6896,13 +6861,6 @@ void perf_register_guest_info_callbacks(struct perf_guest_info_callbacks *cbs)
 		return;
 
 	rcu_assign_pointer(perf_guest_cbs, cbs);
-	static_call_update(__perf_guest_state, cbs->state);
-	static_call_update(__perf_guest_get_ip, cbs->get_ip);
-
-	/* Implementing ->handle_intel_pt_intr is optional. */
-	if (cbs->handle_intel_pt_intr)
-		static_call_update(__perf_guest_handle_intel_pt_intr,
-				   cbs->handle_intel_pt_intr);
 }
 EXPORT_SYMBOL_GPL(perf_register_guest_info_callbacks);
 
@@ -6912,10 +6870,6 @@ void perf_unregister_guest_info_callbacks(struct perf_guest_info_callbacks *cbs)
 		return;
 
 	rcu_assign_pointer(perf_guest_cbs, NULL);
-	static_call_update(__perf_guest_state, (void *)&__static_call_return0);
-	static_call_update(__perf_guest_get_ip, (void *)&__static_call_return0);
-	static_call_update(__perf_guest_handle_intel_pt_intr,
-			   (void *)&__static_call_return0);
 	synchronize_rcu();
 }
 EXPORT_SYMBOL_GPL(perf_unregister_guest_info_callbacks);
@@ -12008,7 +11962,6 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 	init_waitqueue_head(&event->waitq);
 	init_irq_work(&event->pending_irq, perf_pending_irq);
 	init_task_work(&event->pending_task, perf_pending_task);
-	rcuwait_init(&event->pending_work_wait);
 
 	mutex_init(&event->mmap_mutex);
 	raw_spin_lock_init(&event->addr_filters.lock);

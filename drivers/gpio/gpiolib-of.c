@@ -519,6 +519,7 @@ static struct gpio_desc *of_find_gpio_rename(struct device_node *np,
 		 * establish that GPIO properties should be named
 		 * "foo-gpios" so we have this special kludge for them.
 		 */
+		{ "max77759,extbst-ctl",	NULL,	"maxim,max77759chrg" },
 #if IS_ENABLED(CONFIG_REGULATOR_ARIZONA_LDO1)
 		{ "wlf,ldoena",  NULL,		NULL }, /* Arizona */
 #endif
@@ -678,6 +679,7 @@ struct gpio_desc *of_find_gpio(struct device_node *np, const char *con_id,
 
 	return desc;
 }
+EXPORT_SYMBOL_GPL(of_find_gpio);
 
 /**
  * of_parse_own_gpio() - Get a GPIO hog descriptor, names and flags for GPIO API

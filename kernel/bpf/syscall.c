@@ -39,6 +39,8 @@
 
 #include <net/tcx.h>
 
+#include <trace/hooks/syscall_check.h>
+
 #define IS_FD_ARRAY(map) ((map)->map_type == BPF_MAP_TYPE_PERF_EVENT_ARRAY || \
 			  (map)->map_type == BPF_MAP_TYPE_CGROUP_ARRAY || \
 			  (map)->map_type == BPF_MAP_TYPE_ARRAY_OF_MAPS)
@@ -753,11 +755,8 @@ void bpf_map_put(struct bpf_map *map)
 		/* bpf_map_free_id() must be called first */
 		bpf_map_free_id(map);
 
-		WARN_ON_ONCE(atomic64_read(&map->sleepable_refcnt));
 		if (READ_ONCE(map->free_after_mult_rcu_gp))
 			call_rcu_tasks_trace(&map->rcu, bpf_map_free_mult_rcu_gp);
-		else if (READ_ONCE(map->free_after_rcu_gp))
-			call_rcu(&map->rcu, bpf_map_free_rcu_gp);
 		else
 			bpf_map_free_in_work(map);
 	}
@@ -2831,7 +2830,6 @@ static int bpf_obj_get(const union bpf_attr *attr)
 void bpf_link_init(struct bpf_link *link, enum bpf_link_type type,
 		   const struct bpf_link_ops *ops, struct bpf_prog *prog)
 {
-	WARN_ON(ops->dealloc && ops->dealloc_deferred);
 	atomic64_set(&link->refcnt, 1);
 	link->type = type;
 	link->id = 0;
@@ -2902,16 +2900,15 @@ static void bpf_link_defer_dealloc_mult_rcu_gp(struct rcu_head *rcu)
 /* bpf_link_free is guaranteed to be called from process context */
 static void bpf_link_free(struct bpf_link *link)
 {
-	const struct bpf_link_ops *ops = link->ops;
 	bool sleepable = false;
 
 	bpf_link_free_id(link->id);
 	if (link->prog) {
 		sleepable = link->prog->aux->sleepable;
 		/* detach BPF program, clean up used resources */
-		ops->release(link);
+		link->ops->release(link);
 	}
-	if (ops->dealloc_deferred) {
+	if (link->ops->dealloc_deferred) {
 		/* schedule BPF link deallocation; if underlying BPF program
 		 * is sleepable, we need to first wait for RCU tasks trace
 		 * sync, then go through "classic" RCU grace period
@@ -2920,9 +2917,9 @@ static void bpf_link_free(struct bpf_link *link)
 			call_rcu_tasks_trace(&link->rcu, bpf_link_defer_dealloc_mult_rcu_gp);
 		else
 			call_rcu(&link->rcu, bpf_link_defer_dealloc_rcu_gp);
-	} else if (ops->dealloc) {
-		bpf_link_dealloc(link);
 	}
+	if (link->ops->dealloc)
+		bpf_link_dealloc(link);
 }
 
 static void bpf_link_put_deferred(struct work_struct *work)
@@ -3459,34 +3456,26 @@ static void bpf_perf_link_dealloc(struct bpf_link *link)
 }
 
 static int bpf_perf_link_fill_common(const struct perf_event *event,
-				     char __user *uname, u32 *ulenp,
+				     char __user *uname, u32 ulen,
 				     u64 *probe_offset, u64 *probe_addr,
-				     u32 *fd_type, unsigned long *missed)
+				     u32 *fd_type)
 {
 	const char *buf;
-	u32 prog_id, ulen;
+	u32 prog_id;
 	size_t len;
 	int err;
 
-	ulen = *ulenp;
 	if (!ulen ^ !uname)
 		return -EINVAL;
 
 	err = bpf_get_perf_event_info(event, &prog_id, fd_type, &buf,
-				      probe_offset, probe_addr, missed);
+				      probe_offset, probe_addr);
 	if (err)
 		return err;
-
-	if (buf) {
-		len = strlen(buf);
-		*ulenp = len + 1;
-	} else {
-		*ulenp = 1;
-	}
 	if (!uname)
 		return 0;
-
 	if (buf) {
+		len = strlen(buf);
 		err = bpf_copy_to_user(uname, buf, ulen, len);
 		if (err)
 			return err;
@@ -3503,7 +3492,6 @@ static int bpf_perf_link_fill_common(const struct perf_event *event,
 static int bpf_perf_link_fill_kprobe(const struct perf_event *event,
 				     struct bpf_link_info *info)
 {
-	unsigned long missed;
 	char __user *uname;
 	u64 addr, offset;
 	u32 ulen, type;
@@ -3511,21 +3499,19 @@ static int bpf_perf_link_fill_kprobe(const struct perf_event *event,
 
 	uname = u64_to_user_ptr(info->perf_event.kprobe.func_name);
 	ulen = info->perf_event.kprobe.name_len;
-	err = bpf_perf_link_fill_common(event, uname, &ulen, &offset, &addr,
-					&type, &missed);
+	err = bpf_perf_link_fill_common(event, uname, ulen, &offset, &addr,
+					&type);
 	if (err)
 		return err;
 	if (type == BPF_FD_TYPE_KRETPROBE)
 		info->perf_event.type = BPF_PERF_EVENT_KRETPROBE;
 	else
 		info->perf_event.type = BPF_PERF_EVENT_KPROBE;
-	info->perf_event.kprobe.name_len = ulen;
+
 	info->perf_event.kprobe.offset = offset;
-	info->perf_event.kprobe.missed = missed;
 	if (!kallsyms_show_value(current_cred()))
 		addr = 0;
 	info->perf_event.kprobe.addr = addr;
-	info->perf_event.kprobe.cookie = event->bpf_cookie;
 	return 0;
 }
 #endif
@@ -3541,8 +3527,8 @@ static int bpf_perf_link_fill_uprobe(const struct perf_event *event,
 
 	uname = u64_to_user_ptr(info->perf_event.uprobe.file_name);
 	ulen = info->perf_event.uprobe.name_len;
-	err = bpf_perf_link_fill_common(event, uname, &ulen, &offset, &addr,
-					&type, NULL);
+	err = bpf_perf_link_fill_common(event, uname, ulen, &offset, &addr,
+					&type);
 	if (err)
 		return err;
 
@@ -3550,9 +3536,7 @@ static int bpf_perf_link_fill_uprobe(const struct perf_event *event,
 		info->perf_event.type = BPF_PERF_EVENT_URETPROBE;
 	else
 		info->perf_event.type = BPF_PERF_EVENT_UPROBE;
-	info->perf_event.uprobe.name_len = ulen;
 	info->perf_event.uprobe.offset = offset;
-	info->perf_event.uprobe.cookie = event->bpf_cookie;
 	return 0;
 }
 #endif
@@ -3576,18 +3560,11 @@ static int bpf_perf_link_fill_tracepoint(const struct perf_event *event,
 {
 	char __user *uname;
 	u32 ulen;
-	int err;
 
 	uname = u64_to_user_ptr(info->perf_event.tracepoint.tp_name);
 	ulen = info->perf_event.tracepoint.name_len;
-	err = bpf_perf_link_fill_common(event, uname, &ulen, NULL, NULL, NULL, NULL);
-	if (err)
-		return err;
-
 	info->perf_event.type = BPF_PERF_EVENT_TRACEPOINT;
-	info->perf_event.tracepoint.name_len = ulen;
-	info->perf_event.tracepoint.cookie = event->bpf_cookie;
-	return 0;
+	return bpf_perf_link_fill_common(event, uname, ulen, NULL, NULL, NULL);
 }
 
 static int bpf_perf_link_fill_perf_event(const struct perf_event *event,
@@ -3595,7 +3572,6 @@ static int bpf_perf_link_fill_perf_event(const struct perf_event *event,
 {
 	info->perf_event.event.type = event->attr.type;
 	info->perf_event.event.config = event->attr.config;
-	info->perf_event.event.cookie = event->bpf_cookie;
 	info->perf_event.type = BPF_PERF_EVENT_EVENT;
 	return 0;
 }
@@ -4935,7 +4911,7 @@ static int bpf_task_fd_query(const union bpf_attr *attr,
 
 		err = bpf_get_perf_event_info(event, &prog_id, &fd_type,
 					      &buf, &probe_offset,
-					      &probe_addr, NULL);
+					      &probe_addr);
 		if (!err)
 			err = bpf_task_fd_query_copy(attr, uattr, prog_id,
 						     fd_type, buf,
@@ -5400,11 +5376,6 @@ static int bpf_prog_bind_map(union bpf_attr *attr)
 		goto out_unlock;
 	}
 
-	/* The bpf program will not access the bpf map, but for the sake of
-	 * simplicity, increase sleepable_refcnt for sleepable program as well.
-	 */
-	if (prog->aux->sleepable)
-		atomic64_inc(&map->sleepable_refcnt);
 	memcpy(used_maps_new, used_maps_old,
 	       sizeof(used_maps_old[0]) * prog->aux->used_map_cnt);
 	used_maps_new[prog->aux->used_map_cnt] = map;
@@ -5438,6 +5409,8 @@ static int __sys_bpf(int cmd, bpfptr_t uattr, unsigned int size)
 	memset(&attr, 0, sizeof(attr));
 	if (copy_from_bpfptr(&attr, uattr, size) != 0)
 		return -EFAULT;
+
+	trace_android_vh_check_bpf_syscall(cmd, &attr, size);
 
 	err = security_bpf(cmd, &attr, size);
 	if (err < 0)
@@ -5706,8 +5679,7 @@ static const struct bpf_func_proto bpf_kallsyms_lookup_name_proto = {
 	.arg1_type	= ARG_PTR_TO_MEM,
 	.arg2_type	= ARG_CONST_SIZE_OR_ZERO,
 	.arg3_type	= ARG_ANYTHING,
-	.arg4_type	= ARG_PTR_TO_FIXED_SIZE_MEM | MEM_UNINIT | MEM_WRITE | MEM_ALIGNED,
-	.arg4_size	= sizeof(u64),
+	.arg4_type	= ARG_PTR_TO_LONG,
 };
 
 static const struct bpf_func_proto *

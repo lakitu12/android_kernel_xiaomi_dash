@@ -10,6 +10,7 @@
 #include <linux/ptrace.h>
 #include <linux/slab.h>
 #include <linux/pagemap.h>
+#include <linux/pgsize_migration.h>
 #include <linux/mempolicy.h>
 #include <linux/rmap.h>
 #include <linux/swap.h>
@@ -17,9 +18,11 @@
 #include <linux/swapops.h>
 #include <linux/mmu_notifier.h>
 #include <linux/page_idle.h>
+#include <linux/page_size_compat.h>
 #include <linux/shmem_fs.h>
 #include <linux/uaccess.h>
 #include <linux/pkeys.h>
+#include <trace/hooks/mm.h>
 
 #include <asm/elf.h>
 #include <asm/tlb.h>
@@ -278,7 +281,10 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 	}
 
 	start = vma->vm_start;
-	end = vma->vm_end;
+	end = VMA_PAD_START(vma);
+
+	__fold_filemap_fixup_entry(&((struct proc_maps_private *)m->private)->iter, &end);
+
 	show_vma_header_prefix(m, start, end, flags, pgoff, dev, ino);
 	if (mm)
 		anon_name = anon_vma_name(vma);
@@ -339,7 +345,13 @@ done:
 
 static int show_map(struct seq_file *m, void *v)
 {
-	show_map_vma(m, v);
+	struct vm_area_struct *vma = v;
+
+	if (vma_pages(vma))
+		show_map_vma(m, vma);
+
+	show_map_pad_vma(vma, m, show_map_vma, false);
+
 	return 0;
 }
 
@@ -395,6 +407,10 @@ struct mem_size_stats {
 	unsigned long shmem_thp;
 	unsigned long file_thp;
 	unsigned long swap;
+	unsigned long swap_shared;
+	unsigned long writeback;
+	unsigned long same;
+	unsigned long huge;
 	unsigned long shared_hugetlb;
 	unsigned long private_hugetlb;
 	unsigned long ksm;
@@ -546,9 +562,14 @@ static void smaps_pte_entry(pte_t *pte, unsigned long addr,
 
 				do_div(pss_delta, mapcount);
 				mss->swap_pss += pss_delta;
+				trace_android_vh_smaps_swap_shared(
+						&mss->swap_shared);
 			} else {
 				mss->swap_pss += (u64)PAGE_SIZE << PSS_SHIFT;
 			}
+			trace_android_vh_smaps_pte_entry(swpent,
+					&mss->writeback,
+					&mss->same, &mss->huge);
 		} else if (is_pfn_swap_entry(swpent)) {
 			if (is_migration_entry(swpent))
 				migration = true;
@@ -700,12 +721,18 @@ static void show_smap_vma_flags(struct seq_file *m, struct vm_area_struct *vma)
 #ifdef CONFIG_X86_USER_SHADOW_STACK
 		[ilog2(VM_SHADOW_STACK)] = "ss",
 #endif
+#ifdef CONFIG_64BIT
+		[ilog2(VM_SEALED)] = "sl",
+#endif
 	};
+	unsigned long pad_pages = vma_pad_pages(vma);
 	size_t i;
 
 	seq_puts(m, "VmFlags: ");
 	for (i = 0; i < BITS_PER_LONG; i++) {
 		if (!mnemonics[i][0])
+			continue;
+		if ((1UL << i) & VM_PAD_MASK)
 			continue;
 		if (vma->vm_flags & (1UL << i)) {
 			seq_putc(m, mnemonics[i][0]);
@@ -713,6 +740,9 @@ static void show_smap_vma_flags(struct seq_file *m, struct vm_area_struct *vma)
 			seq_putc(m, ' ');
 		}
 	}
+	if (pad_pages)
+		seq_printf(m, "pad=%lukB", pad_pages << (PAGE_SHIFT - 10));
+
 	seq_putc(m, '\n');
 }
 
@@ -769,9 +799,10 @@ static void smap_gather_stats(struct vm_area_struct *vma,
 		struct mem_size_stats *mss, unsigned long start)
 {
 	const struct mm_walk_ops *ops = &smaps_walk_ops;
+	unsigned long end = VMA_PAD_START(vma);
 
 	/* Invalid start */
-	if (start >= vma->vm_end)
+	if (start >= end)
 		return;
 
 	if (vma->vm_file && shmem_mapping(vma->vm_file->f_mapping)) {
@@ -788,7 +819,15 @@ static void smap_gather_stats(struct vm_area_struct *vma,
 		unsigned long shmem_swapped = shmem_swap_usage(vma);
 
 		if (!start && (!shmem_swapped || (vma->vm_flags & VM_SHARED) ||
-					!(vma->vm_flags & VM_WRITE))) {
+					!(vma->vm_flags & VM_WRITE)) &&
+					/*
+					 * Only if we don't have padding can we use the fast path
+					 * shmem_inode_info->swapped for shmem_swapped.
+					 *
+					 * Else we'll walk the page table to calculate
+					 * shmem_swapped, (excluding the padding region).
+					 */
+					end == vma->vm_end) {
 			mss->swap += shmem_swapped;
 		} else {
 			ops = &smaps_shmem_walk_ops;
@@ -797,9 +836,9 @@ static void smap_gather_stats(struct vm_area_struct *vma,
 
 	/* mmap_lock is held in m_start */
 	if (!start)
-		walk_page_vma(vma, ops, mss);
+		walk_page_range(vma->vm_mm, vma->vm_start, end, ops, mss);
 	else
-		walk_page_range(vma->vm_mm, start, vma->vm_end, ops, mss);
+		walk_page_range(vma->vm_mm, start, end, ops, mss);
 }
 
 #define SEQ_PUT_DEC(str, val) \
@@ -844,6 +883,8 @@ static void __show_smap(struct seq_file *m, const struct mem_size_stats *mss,
 	SEQ_PUT_DEC(" kB\nLocked:         ",
 					mss->pss_locked >> PSS_SHIFT);
 	seq_puts(m, " kB\n");
+	trace_android_vh_show_smap_swap_shared(m, mss->swap_shared);
+	trace_android_vh_show_smap(m, mss->writeback, mss->same, mss->huge);
 }
 
 static int show_smap(struct seq_file *m, void *v)
@@ -853,11 +894,14 @@ static int show_smap(struct seq_file *m, void *v)
 
 	memset(&mss, 0, sizeof(mss));
 
+	if (!vma_pages(vma))
+		goto show_pad;
+
 	smap_gather_stats(vma, &mss, 0);
 
 	show_map_vma(m, vma);
 
-	SEQ_PUT_DEC("Size:           ", vma->vm_end - vma->vm_start);
+	SEQ_PUT_DEC("Size:           ", VMA_PAD_START(vma) - vma->vm_start);
 	SEQ_PUT_DEC(" kB\nKernelPageSize: ", vma_kernel_pagesize(vma));
 	SEQ_PUT_DEC(" kB\nMMUPageSize:    ", vma_mmu_pagesize(vma));
 	seq_puts(m, " kB\n");
@@ -865,11 +909,15 @@ static int show_smap(struct seq_file *m, void *v)
 	__show_smap(m, &mss, false);
 
 	seq_printf(m, "THPeligible:    %8u\n",
-		   hugepage_vma_check(vma, vma->vm_flags, true, false, true));
+		   !!thp_vma_allowable_orders(vma, vma->vm_flags,
+			   TVA_SMAPS | TVA_ENFORCE_SYSFS, THP_ORDERS_ALL));
 
 	if (arch_pkeys_enabled())
 		seq_printf(m, "ProtectionKey:  %8u\n", vma_pkey(vma));
 	show_smap_vma_flags(m, vma);
+
+show_pad:
+	show_map_pad_vma(vma, m, show_smap, true);
 
 	return 0;
 }
@@ -1624,6 +1672,30 @@ static const struct mm_walk_ops pagemap_ops = {
 	.walk_lock	= PGWALK_RDLOCK,
 };
 
+static inline void __collapse_pagemap_result(pagemap_entry_t *src_vec,
+					     pagemap_entry_t *res_vec,
+					     unsigned long entries,
+					     unsigned int nr_subpages)
+{
+	unsigned int i;
+
+	if (nr_subpages == 1)
+		return;
+
+	for (i = 0; i < entries; i++) {
+		/*
+		 * Zero the PFN since there is no guarantee that the PFNs are contiguous.
+		 * Zero the flags - applicable flags are derived from the sub-entries,
+		 *                  inapplicable flags are kept zeroed.
+		 */
+		if (i % nr_subpages == 0)
+			res_vec[i / nr_subpages] = make_pme(0, 0);
+
+		res_vec[i / nr_subpages].pme
+			|= src_vec[i].pme & (PM_SOFT_DIRTY|PM_MMAP_EXCLUSIVE|PM_FILE|PM_PRESENT);
+	}
+}
+
 /*
  * /proc/pid/pagemap - an array mapping virtual pages to pfns
  *
@@ -1661,6 +1733,8 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 	unsigned long start_vaddr;
 	unsigned long end_vaddr;
 	int ret = 0, copied = 0;
+	unsigned int nr_subpages = __PAGE_SIZE / PAGE_SIZE;
+	pagemap_entry_t *res = NULL;
 
 	if (!mm || !mmget_not_zero(mm))
 		goto out;
@@ -1682,6 +1756,21 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 	ret = -ENOMEM;
 	if (!pm.buffer)
 		goto out_mm;
+
+	if (unlikely(nr_subpages > 1)) {
+		/*
+		 * Userspace thinks the pages are large than the actually are, adjust the count to
+		 * compensate.
+		 */
+		count *= nr_subpages;
+
+		res = kcalloc(pm.len / nr_subpages, PM_ENTRY_BYTES, GFP_KERNEL);
+		if (!res) {
+			ret = -ENOMEM;
+			goto out_free;
+		}
+	} else
+		res = pm.buffer;
 
 	src = *ppos;
 	svpfn = src / PM_ENTRY_BYTES;
@@ -1725,19 +1814,33 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 		start_vaddr = end;
 
 		len = min(count, PM_ENTRY_BYTES * pm.pos);
-		if (copy_to_user(buf, pm.buffer, len)) {
+
+		__collapse_pagemap_result(pm.buffer, res, len / PM_ENTRY_BYTES, nr_subpages);
+
+		if (copy_to_user(buf, res, len / nr_subpages)) {
 			ret = -EFAULT;
 			goto out_free;
 		}
+
+		/*
+		 * If emulating the page size, clear the old results, to avoid
+		 * corrupting the next __collapse_pagemap_result()
+		 */
+		if (unlikely(nr_subpages > 1))
+			memset(res, 0, len / nr_subpages);
+
 		copied += len;
-		buf += len;
+		buf += len / nr_subpages;
 		count -= len;
 	}
 	*ppos += copied;
 	if (!ret || ret == PM_END_OF_BUFFER)
-		ret = copied;
+		ret = copied / nr_subpages;
 
 out_free:
+	/* Avoid double free, as res = pm.buffer if nr_subpages == 1 */
+	if (unlikely(nr_subpages > 1))
+		kfree(res);
 	kfree(pm.buffer);
 out_mm:
 	mmput(mm);
@@ -1765,12 +1868,36 @@ static int pagemap_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
+loff_t __pagemap_lseek(struct file *file, loff_t offset, int orig)
+{
+	unsigned long nr_subpages = __PAGE_SIZE / PAGE_SIZE;
+	loff_t ret;
+
+	/*
+	 * Userspace thinks the pages are larger than they actually are, so adjust the
+	 * offset to compensate.
+	 */
+	offset *= nr_subpages;
+
+	ret = mem_lseek(file, offset, orig);  /* borrow this */
+	if (ret < 0)
+		return offset;
+
+	/* Re-adjust the offset to reflect the larger userspace page size. */
+	return ret / nr_subpages;
+}
+
 const struct file_operations proc_pagemap_operations = {
-	.llseek		= mem_lseek, /* borrow this */
+	.llseek		= __pagemap_lseek,
 	.read		= pagemap_read,
 	.open		= pagemap_open,
 	.release	= pagemap_release,
 };
+
+bool __is_emulated_pagemap_file(struct file *file)
+{
+	return __PAGE_SIZE != PAGE_SIZE && file->f_op == &proc_pagemap_operations;
+}
 #endif /* CONFIG_PROC_PAGE_MONITOR */
 
 #ifdef CONFIG_NUMA

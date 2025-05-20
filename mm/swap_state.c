@@ -310,8 +310,19 @@ void free_page_and_swap_cache(struct page *page)
 void free_pages_and_swap_cache(struct encoded_page **pages, int nr)
 {
 	lru_add_drain();
-	for (int i = 0; i < nr; i++)
-		free_swap_cache(encoded_page_ptr(pages[i]));
+	for (int i = 0; i < nr; i++) {
+		struct page *page = encoded_page_ptr(pages[i]);
+
+		/*
+		 * Skip over the "nr_pages" entry. It's sufficient to call
+		 * free_swap_cache() only once per folio.
+		 */
+		if (unlikely(encoded_page_flags(pages[i]) &
+			     ENCODED_PAGE_BIT_NR_PAGES_NEXT))
+			i++;
+
+		free_swap_cache(page);
+	}
 	release_pages(pages, nr);
 }
 
@@ -460,7 +471,7 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 		/*
 		 * Swap entry may have been freed since our caller observed it.
 		 */
-		err = swapcache_prepare(entry);
+		err = swapcache_prepare(entry, 1);
 		if (!err)
 			break;
 
@@ -492,7 +503,7 @@ struct page *__read_swap_cache_async(swp_entry_t entry, gfp_t gfp_mask,
 	if (add_to_swap_cache(folio, entry, gfp_mask & GFP_RECLAIM_MASK, &shadow))
 		goto fail_unlock;
 
-	mem_cgroup_swapin_uncharge_swap(entry);
+	mem_cgroup_swapin_uncharge_swap(entry, 1);
 
 	if (shadow)
 		workingset_refault(folio, shadow);

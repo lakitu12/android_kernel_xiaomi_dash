@@ -593,6 +593,7 @@ out:
 		pkt_len = 1;
 	qdisc_skb_cb(skb)->pkt_len = pkt_len;
 }
+EXPORT_SYMBOL(__qdisc_calculate_pkt_len);
 
 void qdisc_warn_nonwc(const char *txt, struct Qdisc *qdisc)
 {
@@ -1365,7 +1366,6 @@ err_out4:
 		ops->destroy(sch);
 	qdisc_put_stab(rtnl_dereference(sch->stab));
 err_out3:
-	lockdep_unregister_key(&sch->root_lock_key);
 	netdev_put(dev, &sch->dev_tracker);
 	qdisc_free(sch);
 err_out2:

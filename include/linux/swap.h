@@ -29,9 +29,21 @@ struct pagevec;
 #define SWAP_FLAG_DISCARD_ONCE	0x20000 /* discard swap area at swapon-time */
 #define SWAP_FLAG_DISCARD_PAGES 0x40000 /* discard page-clusters after use */
 
+/* set if swap cluters reserve order and percent specified */
+#define SWAP_FLAG_MTHP_RESERVE			0x80000
+/* order to reserve: Orders [1, PMD_ORDER] are valid */
+#define SWAP_FLAG_MTHP_RESERVE_ORDER_MASK	0x00F00000
+#define SWAP_FLAG_MTHP_RESERVE_ORDER_SHIFT	20
+/* percentage of swap clusters to reserve; [1, 100] are valid */
+#define SWAP_FLAG_MTHP_RESERVE_PERCENT_MASK	0x7F000000
+#define SWAP_FLAG_MTHP_RESERVE_PERCENT_SHIFT	24
+
 #define SWAP_FLAGS_VALID	(SWAP_FLAG_PRIO_MASK | SWAP_FLAG_PREFER | \
 				 SWAP_FLAG_DISCARD | SWAP_FLAG_DISCARD_ONCE | \
-				 SWAP_FLAG_DISCARD_PAGES)
+				 SWAP_FLAG_DISCARD_PAGES | \
+				 SWAP_FLAG_MTHP_RESERVE | \
+				 SWAP_FLAG_MTHP_RESERVE_ORDER_MASK | \
+				 SWAP_FLAG_MTHP_RESERVE_PERCENT_MASK)
 #define SWAP_BATCH 64
 
 static inline int current_is_kswapd(void)
@@ -243,23 +255,40 @@ enum {
  * free clusters are organized into a list. We fetch an entry from the list to
  * get a free cluster.
  *
- * The data field stores next cluster if the cluster is free or cluster usage
- * counter otherwise. The flags field determines if a cluster is free. This is
- * protected by swap_info_struct.lock.
+ * The flags field determines if a cluster is free. This is
+ * protected by cluster lock.
  */
 struct swap_cluster_info {
 	spinlock_t lock;	/*
 				 * Protect swap_cluster_info fields
-				 * and swap_info_struct->swap_map
-				 * elements correspond to the swap
-				 * cluster
+				 * other than list, and swap_info_struct->swap_map
+				 * elements corresponding to the swap cluster.
 				 */
-	unsigned int data:24;
-	unsigned int flags:8;
+	unsigned int count:12;
+	unsigned int state:3;
+	unsigned int order:4;
+	unsigned int reserved:1;
+	unsigned int flags:4;
+	struct list_head list;
 };
 #define CLUSTER_FLAG_FREE 1 /* This cluster is free */
-#define CLUSTER_FLAG_NEXT_NULL 2 /* This cluster has no next cluster */
-#define CLUSTER_FLAG_HUGE 4 /* This cluster is backing a transparent huge page */
+#define CLUSTER_FLAG_NONFULL 2 /* This cluster is on nonfull list */
+#define CLUSTER_FLAG_FRAG 4 /* This cluster is on nonfull list */
+#define CLUSTER_FLAG_FULL 8 /* This cluster is on full list */
+
+/*
+ * The first page in the swap file is the swap header, which is always marked
+ * bad to prevent it from being allocated as an entry. This also prevents the
+ * cluster to which it belongs being marked free. Therefore 0 is safe to use as
+ * a sentinel to indicate next is not valid in percpu_cluster.
+ */
+#define SWAP_NEXT_INVALID	0
+
+#ifdef CONFIG_THP_SWAP
+#define SWAP_NR_ORDERS		(PMD_ORDER + 1)
+#else
+#define SWAP_NR_ORDERS		1
+#endif
 
 /*
  * We assign a cluster to each CPU, so each CPU can allocate swap entry from
@@ -267,13 +296,7 @@ struct swap_cluster_info {
  * throughput.
  */
 struct percpu_cluster {
-	struct swap_cluster_info index; /* Current cluster index */
-	unsigned int next; /* Likely next allocation offset */
-};
-
-struct swap_cluster_list {
-	struct swap_cluster_info head;
-	struct swap_cluster_info tail;
+	unsigned int next[SWAP_NR_ORDERS]; /* Likely next allocation offset */
 };
 
 /*
@@ -288,7 +311,9 @@ struct swap_info_struct {
 	unsigned int	max;		/* extent of the swap_map */
 	unsigned char *swap_map;	/* vmalloc'ed array of usage counts */
 	struct swap_cluster_info *cluster_info; /* cluster info. Only for SSD */
-	struct swap_cluster_list free_clusters; /* free clusters list */
+	struct list_head free_clusters; /* free clusters list */
+	struct list_head nonfull_clusters[SWAP_NR_ORDERS];
+					/* list of cluster that contains at least one free slot */
 	unsigned int lowest_bit;	/* index of first free in swap_map */
 	unsigned int highest_bit;	/* index of last free in swap_map */
 	unsigned int pages;		/* total of usable pages of swap */
@@ -320,7 +345,7 @@ struct swap_info_struct {
 					 * list.
 					 */
 	struct work_struct discard_work; /* discard worker */
-	struct swap_cluster_list discard_clusters; /* discard clusters list */
+	struct list_head discard_clusters; /* discard clusters list */
 	struct plist_node avail_lists[]; /*
 					   * entries in swap_avail_heads, one
 					   * entry per node.
@@ -343,7 +368,8 @@ static inline swp_entry_t page_swap_entry(struct page *page)
 }
 
 /* linux/mm/workingset.c */
-bool workingset_test_recent(void *shadow, bool file, bool *workingset);
+bool workingset_test_recent(void *shadow, bool file, bool *workingset,
+				bool flush);
 void workingset_age_nonresident(struct lruvec *lruvec, unsigned long nr_pages);
 void *workingset_eviction(struct folio *folio, struct mem_cgroup *target_memcg);
 void workingset_refault(struct folio *folio, void *shadow);
@@ -396,9 +422,6 @@ void folio_deactivate(struct folio *folio);
 void folio_mark_lazyfree(struct folio *folio);
 extern void swap_setup(void);
 
-extern void lru_cache_add_inactive_or_unevictable(struct page *page,
-						struct vm_area_struct *vma);
-
 /* linux/mm/vmscan.c */
 extern unsigned long zone_reclaimable_pages(struct zone *zone);
 extern unsigned long try_to_free_pages(struct zonelist *zonelist, int order,
@@ -418,6 +441,9 @@ extern unsigned long shrink_all_memory(unsigned long nr_pages);
 extern int vm_swappiness;
 long remove_mapping(struct address_space *mapping, struct folio *folio);
 
+extern unsigned long reclaim_pages(struct list_head *folio_list, bool ignore_references);
+extern unsigned long __reclaim_pages(struct list_head *folio_list, bool ignore_references,
+				     void *private);
 #ifdef CONFIG_NUMA
 extern int node_reclaim_mode;
 extern int sysctl_min_unmapped_ratio;
@@ -474,14 +500,14 @@ swp_entry_t folio_alloc_swap(struct folio *folio);
 bool folio_free_swap(struct folio *folio);
 void put_swap_folio(struct folio *folio, swp_entry_t entry);
 extern swp_entry_t get_swap_page_of_type(int);
-extern int get_swap_pages(int n, swp_entry_t swp_entries[], int entry_size);
+extern int get_swap_pages(int n, swp_entry_t swp_entries[], int order);
 extern int add_swap_count_continuation(swp_entry_t, gfp_t);
 extern void swap_shmem_alloc(swp_entry_t);
 extern int swap_duplicate(swp_entry_t);
-extern int swapcache_prepare(swp_entry_t);
-extern void swap_free(swp_entry_t);
+extern int swapcache_prepare(swp_entry_t entry, int nr);
+extern void swap_free_nr(swp_entry_t entry, int nr_pages);
 extern void swapcache_free_entries(swp_entry_t *entries, int n);
-extern int free_swap_and_cache(swp_entry_t);
+extern void free_swap_and_cache_nr(swp_entry_t entry, int nr);
 int swap_type_of(dev_t device, sector_t offset);
 int find_first_swap(dev_t *device);
 extern unsigned int count_swap_pages(int, int);
@@ -531,8 +557,9 @@ static inline void put_swap_device(struct swap_info_struct *si)
 #define free_pages_and_swap_cache(pages, nr) \
 	release_pages((pages), (nr));
 
-/* used to sanity check ptes in zap_pte_range when CONFIG_SWAP=0 */
-#define free_swap_and_cache(e) is_pfn_swap_entry(e)
+static inline void free_swap_and_cache_nr(swp_entry_t entry, int nr)
+{
+}
 
 static inline void free_swap_cache(struct page *page)
 {
@@ -552,12 +579,12 @@ static inline int swap_duplicate(swp_entry_t swp)
 	return 0;
 }
 
-static inline int swapcache_prepare(swp_entry_t swp)
+static inline int swapcache_prepare(swp_entry_t swp, int nr)
 {
 	return 0;
 }
 
-static inline void swap_free(swp_entry_t swp)
+static inline void swap_free_nr(swp_entry_t entry, int nr_pages)
 {
 }
 
@@ -600,18 +627,27 @@ static inline int add_swap_extent(struct swap_info_struct *sis,
 }
 #endif /* CONFIG_SWAP */
 
-#ifdef CONFIG_THP_SWAP
-extern int split_swap_cluster(swp_entry_t entry);
-#else
-static inline int split_swap_cluster(swp_entry_t entry)
+static inline void free_swap_and_cache(swp_entry_t entry)
 {
-	return 0;
+	free_swap_and_cache_nr(entry, 1);
 }
-#endif
+
+static inline void swap_free(swp_entry_t entry)
+{
+	swap_free_nr(entry, 1);
+}
 
 #ifdef CONFIG_MEMCG
+extern void _trace_android_vh_use_vm_swappiness(bool *use_vm_swappiness);
+
 static inline int mem_cgroup_swappiness(struct mem_cgroup *memcg)
 {
+	bool use_vm_swappiness = false;
+
+	_trace_android_vh_use_vm_swappiness(&use_vm_swappiness);
+	if (use_vm_swappiness)
+		return READ_ONCE(vm_swappiness);
+
 	/* Cgroup2 doesn't have per-cgroup swappiness */
 	if (cgroup_subsys_on_dfl(memory_cgrp_subsys))
 		return READ_ONCE(vm_swappiness);

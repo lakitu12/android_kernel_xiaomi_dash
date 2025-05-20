@@ -9,6 +9,9 @@
 #include <linux/userfaultfd_k.h>
 #include <linux/swapops.h>
 
+#undef CREATE_TRACE_POINTS
+#include <trace/hooks/mm.h>
+
 /**
  * folio_is_file_lru - Should the folio be on a file LRU or anon LRU?
  * @folio: The folio to test.
@@ -217,6 +220,25 @@ static inline void lru_gen_update_size(struct lruvec *lruvec, struct folio *foli
 	VM_WARN_ON_ONCE(lru_gen_is_active(lruvec, old_gen) && !lru_gen_is_active(lruvec, new_gen));
 }
 
+static inline bool lru_gen_add_dst(struct lruvec *lruvec, struct folio *dst)
+{
+	int gen = folio_lru_gen(dst);
+	int type = folio_is_file_lru(dst);
+	int zone = folio_zonenum(dst);
+	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+
+	if (gen < 0)
+		return false;
+
+	lockdep_assert_held(&lruvec->lru_lock);
+	VM_WARN_ON_ONCE_FOLIO(folio_lruvec(dst) != lruvec, dst);
+
+	list_add_tail(&dst->lru, &lrugen->folios[gen][type][zone]);
+	lru_gen_update_size(lruvec, dst, -1, gen);
+
+	return true;
+}
+
 static inline bool lru_gen_add_folio(struct lruvec *lruvec, struct folio *folio, bool reclaiming)
 {
 	unsigned long seq;
@@ -225,6 +247,11 @@ static inline bool lru_gen_add_folio(struct lruvec *lruvec, struct folio *folio,
 	int type = folio_is_file_lru(folio);
 	int zone = folio_zonenum(folio);
 	struct lru_gen_folio *lrugen = &lruvec->lrugen;
+	bool skip = false;
+
+	trace_android_vh_lru_gen_add_folio_skip(lruvec, folio, &skip);
+	if (skip)
+		return true;
 
 	VM_WARN_ON_ONCE_FOLIO(gen != -1, folio);
 
@@ -272,6 +299,11 @@ static inline bool lru_gen_del_folio(struct lruvec *lruvec, struct folio *folio,
 {
 	unsigned long flags;
 	int gen = folio_lru_gen(folio);
+	bool skip = false;
+
+	trace_android_vh_lru_gen_del_folio_skip(lruvec, folio, &skip);
+	if (skip)
+		return true;
 
 	if (gen < 0)
 		return false;
@@ -290,6 +322,12 @@ static inline bool lru_gen_del_folio(struct lruvec *lruvec, struct folio *folio,
 	return true;
 }
 
+static inline void folio_migrate_refs(struct folio *new, struct folio *old)
+{
+	unsigned long refs = READ_ONCE(old->flags) & LRU_REFS_MASK;
+
+	set_mask_bits(&new->flags, LRU_REFS_MASK, refs);
+}
 #else /* !CONFIG_LRU_GEN */
 
 static inline bool lru_gen_enabled(void)
@@ -298,6 +336,11 @@ static inline bool lru_gen_enabled(void)
 }
 
 static inline bool lru_gen_in_fault(void)
+{
+	return false;
+}
+
+static inline bool lru_gen_add_dst(struct lruvec *lruvec, struct folio *dst)
 {
 	return false;
 }
@@ -312,16 +355,26 @@ static inline bool lru_gen_del_folio(struct lruvec *lruvec, struct folio *folio,
 	return false;
 }
 
+static inline void folio_migrate_refs(struct folio *new, struct folio *old)
+{
+
+}
 #endif /* CONFIG_LRU_GEN */
 
 static __always_inline
 void lruvec_add_folio(struct lruvec *lruvec, struct folio *folio)
 {
 	enum lru_list lru = folio_lru_list(folio);
+	bool skip = false;
+
+	trace_android_vh_lruvec_add_folio(lruvec, folio, lru, false, &skip);
+	if (skip)
+		return;
 
 	if (lru_gen_add_folio(lruvec, folio, false))
 		return;
 
+	trace_android_vh_add_page_to_lrulist(folio, false, lru);
 	update_lru_size(lruvec, lru, folio_zonenum(folio),
 			folio_nr_pages(folio));
 	if (lru != LRU_UNEVICTABLE)
@@ -332,10 +385,16 @@ static __always_inline
 void lruvec_add_folio_tail(struct lruvec *lruvec, struct folio *folio)
 {
 	enum lru_list lru = folio_lru_list(folio);
+	bool skip = false;
+
+	trace_android_vh_lruvec_add_folio(lruvec, folio, lru, true, &skip);
+	if (skip)
+		return;
 
 	if (lru_gen_add_folio(lruvec, folio, true))
 		return;
 
+	trace_android_vh_add_page_to_lrulist(folio, false, lru);
 	update_lru_size(lruvec, lru, folio_zonenum(folio),
 			folio_nr_pages(folio));
 	/* This is not expected to be used on LRU_UNEVICTABLE */
@@ -346,10 +405,16 @@ static __always_inline
 void lruvec_del_folio(struct lruvec *lruvec, struct folio *folio)
 {
 	enum lru_list lru = folio_lru_list(folio);
+	bool skip = false;
+
+	trace_android_vh_lruvec_del_folio(lruvec, folio, lru, &skip);
+	if (skip)
+		return;
 
 	if (lru_gen_del_folio(lruvec, folio, false))
 		return;
 
+	trace_android_vh_del_page_from_lrulist(folio, false, lru);
 	if (lru != LRU_UNEVICTABLE)
 		list_del(&folio->lru);
 	update_lru_size(lruvec, lru, folio_zonenum(folio),

@@ -31,6 +31,9 @@
 #include <linux/part_stat.h>
 
 #include <trace/events/block.h>
+#include <trace/hooks/blk.h>
+
+#include <trace/hooks/blk.h>
 
 #include <linux/t10-pi.h>
 #include "blk.h"
@@ -1168,10 +1171,11 @@ static inline bool blk_mq_complete_need_ipi(struct request *rq)
 	if (force_irqthreads())
 		return false;
 
-	/* same CPU or cache domain?  Complete locally */
+	/* same CPU or cache domain and capacity?  Complete locally */
 	if (cpu == rq->mq_ctx->cpu ||
 	    (!test_bit(QUEUE_FLAG_SAME_FORCE, &rq->q->queue_flags) &&
-	     cpus_share_cache(cpu, rq->mq_ctx->cpu)))
+	     cpus_share_cache(cpu, rq->mq_ctx->cpu) &&
+	     cpus_equal_capacity(cpu, rq->mq_ctx->cpu)))
 		return false;
 
 	/* don't try to IPI to an offline CPU */
@@ -1504,6 +1508,12 @@ static void blk_mq_requeue_work(struct work_struct *work)
 
 void blk_mq_kick_requeue_list(struct request_queue *q)
 {
+	bool skip = false;
+
+	trace_android_vh_blk_mq_kick_requeue_list(q, 0, &skip);
+	if (skip)
+		return;
+
 	kblockd_mod_delayed_work_on(WORK_CPU_UNBOUND, &q->requeue_work, 0);
 }
 EXPORT_SYMBOL(blk_mq_kick_requeue_list);
@@ -1511,6 +1521,13 @@ EXPORT_SYMBOL(blk_mq_kick_requeue_list);
 void blk_mq_delay_kick_requeue_list(struct request_queue *q,
 				    unsigned long msecs)
 {
+	bool skip = false;
+
+	trace_android_vh_blk_mq_kick_requeue_list(q,
+			msecs_to_jiffies(msecs), &skip);
+	if (skip)
+		return;
+
 	kblockd_mod_delayed_work_on(WORK_CPU_UNBOUND, &q->requeue_work,
 				    msecs_to_jiffies(msecs));
 }
@@ -1776,9 +1793,6 @@ static bool __blk_mq_alloc_driver_tag(struct request *rq)
 	if (blk_mq_tag_is_reserved(rq->mq_hctx->sched_tags, rq->internal_tag)) {
 		bt = &rq->mq_hctx->tags->breserved_tags;
 		tag_offset = 0;
-	} else {
-		if (!hctx_may_queue(rq->mq_hctx, bt))
-			return false;
 	}
 
 	tag = __sbitmap_queue_get(bt);
@@ -2247,8 +2261,16 @@ select_cpu:
  */
 void blk_mq_delay_run_hw_queue(struct blk_mq_hw_ctx *hctx, unsigned long msecs)
 {
+	bool skip = false;
+
 	if (unlikely(blk_mq_hctx_stopped(hctx)))
 		return;
+
+	trace_android_vh_blk_mq_delay_run_hw_queue(blk_mq_hctx_next_cpu(hctx),
+			hctx, msecs_to_jiffies(msecs), &skip);
+	if (skip)
+		return;
+
 	kblockd_mod_delayed_work_on(blk_mq_hctx_next_cpu(hctx), &hctx->run_work,
 				    msecs_to_jiffies(msecs));
 }
@@ -2623,6 +2645,7 @@ static void blk_mq_bio_to_request(struct request *rq, struct bio *bio,
 		rq->cmd_flags |= REQ_FAILFAST_MASK;
 
 	rq->__sector = bio->bi_iter.bi_sector;
+	rq->write_hint = bio->bi_write_hint;
 	blk_rq_bio_prep(rq, bio, nr_segs);
 
 	/* This can't fail, since GFP_NOIO includes __GFP_DIRECT_RECLAIM. */
@@ -3009,6 +3032,8 @@ void blk_mq_submit_bio(struct bio *bio)
 	unsigned int nr_segs = 1;
 	blk_status_t ret;
 
+	trace_android_vh_check_set_ioprio(bio);
+
 	bio = blk_queue_bounce(bio, q);
 
 	if (plug) {
@@ -3021,6 +3046,8 @@ void blk_mq_submit_bio(struct bio *bio)
 			bio = __bio_split_to_limits(bio, &q->limits, &nr_segs);
 			if (!bio)
 				return;
+		} else if (bio->bi_vcnt == 1) {
+			nr_segs = blk_segments(&q->limits, bio->bi_io_vec[0].bv_len);
 		}
 		if (!bio_integrity_prep(bio))
 			return;
@@ -3036,6 +3063,8 @@ void blk_mq_submit_bio(struct bio *bio)
 			bio = __bio_split_to_limits(bio, &q->limits, &nr_segs);
 			if (!bio)
 				goto fail;
+		} else if (bio->bi_vcnt == 1) {
+			nr_segs = blk_segments(&q->limits, bio->bi_io_vec[0].bv_len);
 		}
 		if (!bio_integrity_prep(bio))
 			goto fail;
@@ -3218,6 +3247,7 @@ int blk_rq_prep_clone(struct request *rq, struct request *rq_src,
 	}
 	rq->nr_phys_segments = rq_src->nr_phys_segments;
 	rq->ioprio = rq_src->ioprio;
+	rq->write_hint = rq_src->write_hint;
 
 	if (rq->bio && blk_crypto_rq_bio_prep(rq, rq->bio, gfp_mask) < 0)
 		goto free_and_out;

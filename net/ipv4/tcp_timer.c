@@ -22,6 +22,7 @@
 #include <linux/module.h>
 #include <linux/gfp.h>
 #include <net/tcp.h>
+#include <trace/hooks/net.h>
 
 static u32 tcp_clamp_rto_to_user_timeout(const struct sock *sk)
 {
@@ -250,6 +251,7 @@ static int tcp_write_timeout(struct sock *sk)
 		if (retransmits_timed_out(sk, READ_ONCE(net->ipv4.sysctl_tcp_retries1), 0)) {
 			/* Black hole detection */
 			tcp_mtu_probing(icsk, sk);
+			trace_android_vh_tcp_write_timeout_estab_retrans(sk);
 
 			__dst_negative_advice(sk);
 		}
@@ -278,9 +280,14 @@ static int tcp_write_timeout(struct sock *sk)
 
 	if (expired) {
 		/* Has it gone just too far? */
+
+		trace_android_vh_tcp_state_change(sk, TCP_STATE_CHANGE_REASON_SYN_TIMEOUT, 0);
+
 		tcp_write_err(sk);
 		return 1;
 	}
+
+	trace_android_vh_tcp_state_change(sk, TCP_STATE_CHANGE_REASON_RETRANSMIT, 0);
 
 	if (sk_rethink_txhash(sk)) {
 		tp->timeout_rehash++;
@@ -411,19 +418,6 @@ abort:		tcp_write_err(sk);
 	}
 }
 
-static void tcp_update_rto_stats(struct sock *sk)
-{
-	struct inet_connection_sock *icsk = inet_csk(sk);
-	struct tcp_sock *tp = tcp_sk(sk);
-
-	if (!icsk->icsk_retransmits) {
-		tp->total_rto_recoveries++;
-		tp->rto_stamp = tcp_time_stamp(tp);
-	}
-	icsk->icsk_retransmits++;
-	tp->total_rto++;
-}
-
 /*
  *	Timer for Fast Open socket to retransmit SYNACK. Note that the
  *	sk here is the child socket, not the parent (listener) socket.
@@ -456,7 +450,7 @@ static void tcp_fastopen_synack_timer(struct sock *sk, struct request_sock *req)
 	 */
 	inet_rtx_syn_ack(sk, req);
 	req->num_timeout++;
-	tcp_update_rto_stats(sk);
+	icsk->icsk_retransmits++;
 	if (!tp->retrans_stamp)
 		tp->retrans_stamp = tcp_time_stamp(tp);
 	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
@@ -599,7 +593,7 @@ void tcp_retransmit_timer(struct sock *sk)
 
 	tcp_enter_loss(sk);
 
-	tcp_update_rto_stats(sk);
+	icsk->icsk_retransmits++;
 	if (tcp_retransmit_skb(sk, tcp_rtx_queue_head(sk), 1) > 0) {
 		/* Retransmission failed because of local congestion,
 		 * Let senders fight for local resources conservatively.
@@ -652,6 +646,8 @@ out_reset_timer:
 		 * activated.
 		 */
 		icsk->icsk_rto = min(icsk->icsk_rto << 1, TCP_RTO_MAX);
+
+		trace_android_vh_tcp_fastsyn(sk);
 	}
 	inet_csk_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
 				  tcp_clamp_rto_to_user_timeout(sk), TCP_RTO_MAX);

@@ -47,6 +47,7 @@
 #include <linux/cgroup.h>
 #include <linux/audit.h>
 #include <linux/sysctl.h>
+#include <linux/oom.h>
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/signal.h>
@@ -58,6 +59,9 @@
 #include <asm/cacheflush.h>
 #include <asm/syscall.h>	/* for syscall_get_* */
 
+#undef CREATE_TRACE_POINTS
+#include <trace/hooks/signal.h>
+#include <trace/hooks/dtask.h>
 /*
  * SLAB caches for signal bits.
  */
@@ -1006,6 +1010,7 @@ static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
 {
 	struct signal_struct *signal = p->signal;
 	struct task_struct *t;
+	bool wake;
 
 	/*
 	 * Now find a thread we can wake up to take the signal off the queue.
@@ -1061,9 +1066,13 @@ static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
 			signal->group_stop_count = 0;
 			t = p;
 			do {
+				trace_android_vh_exit_signal(t);
 				task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
 				sigaddset(&t->pending.signal, SIGKILL);
-				signal_wake_up(t, 1);
+				wake = true;
+				trace_android_vh_exit_signal_whether_wake(t, &wake);
+				if (wake)
+					signal_wake_up(t, 1);
 			} while_each_thread(p, t);
 			return;
 		}
@@ -1196,6 +1205,7 @@ out_set:
 	complete_signal(sig, t, type);
 ret:
 	trace_signal_generate(sig, info, t, type != PIDTYPE_PID, result);
+	trace_android_vh_send_signal_locked(result, ret, sig, t, type, info);
 	return ret;
 }
 
@@ -1307,7 +1317,7 @@ int do_send_sig_info(int sig, struct kernel_siginfo *info, struct task_struct *p
 {
 	unsigned long flags;
 	int ret = -ESRCH;
-
+	trace_android_vh_do_send_sig_info(sig, current, p);
 	if (lock_task_sighand(p, &flags)) {
 		ret = send_signal_locked(sig, info, p, type);
 		unlock_task_sighand(p, &flags);
@@ -1315,6 +1325,7 @@ int do_send_sig_info(int sig, struct kernel_siginfo *info, struct task_struct *p
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(do_send_sig_info);
 
 enum sig_handler {
 	HANDLER_CURRENT, /* If reachable use the current handler */
@@ -1458,8 +1469,16 @@ int group_send_sig_info(int sig, struct kernel_siginfo *info,
 	ret = check_kill_permission(sig, info, p);
 	rcu_read_unlock();
 
-	if (!ret && sig)
+	if (!ret && sig) {
 		ret = do_send_sig_info(sig, info, p, type);
+		if (!ret && sig == SIGKILL) {
+			bool reap = false;
+
+			trace_android_vh_killed_process(current, p, &reap);
+			if (reap)
+				add_to_oom_reaper(p);
+		}
+	}
 
 	return ret;
 }
@@ -4725,6 +4744,7 @@ __weak const char *arch_vma_name(struct vm_area_struct *vma)
 {
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(arch_vma_name);
 
 static inline void siginfo_buildtime_checks(void)
 {

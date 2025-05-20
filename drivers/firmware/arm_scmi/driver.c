@@ -85,6 +85,7 @@ struct scmi_xfers_info {
  * @gid: A reference for per-protocol devres management.
  * @users: A refcount to track effective users of this protocol.
  * @priv: Reference for optional protocol private data.
+ * @version: Protocol version supported by the platform as detected at runtime.
  * @ph: An embedded protocol handle that will be passed down to protocol
  *	initialization code to identify this instance.
  *
@@ -97,6 +98,7 @@ struct scmi_protocol_instance {
 	void				*gid;
 	refcount_t			users;
 	void				*priv;
+	unsigned int			version;
 	struct scmi_protocol_handle	ph;
 };
 
@@ -153,6 +155,7 @@ struct scmi_debug_info {
  * @devreq_mtx: A mutex to serialize device creation for this SCMI instance
  * @dbg: A pointer to debugfs related data (if any)
  * @raw: An opaque reference handle used by SCMI Raw mode.
+ * @max_rx_timeout_ms: the maximum receive channel timeout value
  */
 struct scmi_info {
 	int id;
@@ -179,6 +182,7 @@ struct scmi_info {
 	struct mutex devreq_mtx;
 	struct scmi_debug_info *dbg;
 	void *raw;
+	unsigned int max_rx_timeout_ms;
 };
 
 #define handle_to_scmi_info(h)	container_of(h, struct scmi_info, handle)
@@ -1124,11 +1128,11 @@ static int scmi_wait_for_message_response(struct scmi_chan_info *cinfo,
 
 	trace_scmi_xfer_response_wait(xfer->transfer_id, xfer->hdr.id,
 				      xfer->hdr.protocol_id, xfer->hdr.seq,
-				      info->desc->max_rx_timeout_ms,
+				      info->max_rx_timeout_ms,
 				      xfer->hdr.poll_completion);
 
 	return scmi_wait_for_reply(dev, info->desc, cinfo, xfer,
-				   info->desc->max_rx_timeout_ms);
+				   info->max_rx_timeout_ms);
 }
 
 /**
@@ -1397,15 +1401,17 @@ static int version_get(const struct scmi_protocol_handle *ph, u32 *version)
  *
  * @ph: A reference to the protocol handle.
  * @priv: The private data to set.
+ * @version: The detected protocol version for the core to register.
  *
  * Return: 0 on Success
  */
 static int scmi_set_protocol_priv(const struct scmi_protocol_handle *ph,
-				  void *priv)
+				  void *priv, u32 version)
 {
 	struct scmi_protocol_instance *pi = ph_to_pi(ph);
 
 	pi->priv = priv;
+	pi->version = version;
 
 	return 0;
 }
@@ -1443,6 +1449,7 @@ struct scmi_msg_resp_domain_name_get {
  * @ph: A protocol handle reference.
  * @cmd_id: The specific command ID to use.
  * @res_id: The specific resource ID to use.
+ * @flags: A pointer to specific flags to use, if any.
  * @name: A pointer to the preallocated area where the retrieved name will be
  *	  stored as a NULL terminated string.
  * @len: The len in bytes of the @name char array.
@@ -1450,19 +1457,22 @@ struct scmi_msg_resp_domain_name_get {
  * Return: 0 on Succcess
  */
 static int scmi_common_extended_name_get(const struct scmi_protocol_handle *ph,
-					 u8 cmd_id, u32 res_id, char *name,
-					 size_t len)
+					 u8 cmd_id, u32 res_id, u32 *flags,
+					 char *name, size_t len)
 {
 	int ret;
+	size_t txlen;
 	struct scmi_xfer *t;
 	struct scmi_msg_resp_domain_name_get *resp;
 
-	ret = ph->xops->xfer_get_init(ph, cmd_id, sizeof(res_id),
-				      sizeof(*resp), &t);
+	txlen = !flags ? sizeof(res_id) : sizeof(res_id) + sizeof(*flags);
+	ret = ph->xops->xfer_get_init(ph, cmd_id, txlen, sizeof(*resp), &t);
 	if (ret)
 		goto out;
 
 	put_unaligned_le32(res_id, t->tx.buf);
+	if (flags)
+		put_unaligned_le32(*flags, t->tx.buf + sizeof(res_id));
 	resp = t->rx.buf;
 
 	ret = ph->xops->do_xfer(ph, t);
@@ -1476,6 +1486,20 @@ out:
 			 "Failed to get extended name - id:%u (ret:%d). Using %s\n",
 			 res_id, ret, name);
 	return ret;
+}
+
+/**
+ * scmi_common_get_max_msg_size  - Get maximum message size
+ * @ph: A protocol handle reference.
+ *
+ * Return: Maximum message size for the current protocol.
+ */
+static int scmi_common_get_max_msg_size(const struct scmi_protocol_handle *ph)
+{
+	const struct scmi_protocol_instance *pi = ph_to_pi(ph);
+	struct scmi_info *info = handle_to_scmi_info(pi->handle);
+
+	return info->desc->max_msg_size;
 }
 
 /**
@@ -1753,6 +1777,7 @@ static void scmi_common_fastchannel_db_ring(struct scmi_fc_db_info *db)
 
 static const struct scmi_proto_helpers_ops helpers_ops = {
 	.extended_name_get = scmi_common_extended_name_get,
+	.get_max_msg_size = scmi_common_get_max_msg_size,
 	.iter_response_init = scmi_iterator_init,
 	.iter_response_run = scmi_iterator_run,
 	.fastchannel_init = scmi_common_fastchannel_init,
@@ -1849,6 +1874,12 @@ scmi_alloc_init_protocol_instance(struct scmi_info *info,
 
 	devres_close_group(handle->dev, pi->gid);
 	dev_dbg(handle->dev, "Initialized protocol: 0x%X\n", pi->proto->id);
+
+	if (pi->version > proto->supported_version)
+		dev_warn(handle->dev,
+			 "Detected UNSUPPORTED higher version 0x%X for protocol 0x%X."
+			 "Backward compatibility is NOT assured.\n",
+			 pi->version, pi->proto->id);
 
 	return pi;
 
@@ -2325,7 +2356,7 @@ static int scmi_chan_setup(struct scmi_info *info, struct device_node *of_node,
 		return -ENOMEM;
 
 	cinfo->is_p2a = !tx;
-	cinfo->rx_timeout_ms = info->desc->max_rx_timeout_ms;
+	cinfo->rx_timeout_ms = info->max_rx_timeout_ms;
 
 	/* Create a unique name for this transport device */
 	snprintf(name, 32, "__scmi_transport_device_%s_%02X",
@@ -2595,7 +2626,7 @@ static struct scmi_debug_info *scmi_debugfs_common_setup(struct scmi_info *info)
 	debugfs_create_bool("is_atomic", 0400, trans, &dbg->is_atomic);
 
 	debugfs_create_u32("max_rx_timeout_ms", 0400, trans,
-			   (u32 *)&info->desc->max_rx_timeout_ms);
+			   (u32 *)&info->max_rx_timeout_ms);
 
 	debugfs_create_u32("max_msg_size", 0400, trans,
 			   (u32 *)&info->desc->max_msg_size);
@@ -2645,7 +2676,8 @@ static int scmi_debugfs_raw_mode_setup(struct scmi_info *info)
 
 	info->raw = scmi_raw_mode_init(&info->handle, info->dbg->top_dentry,
 				       info->id, channels, num_chans,
-				       info->desc, info->tx_minfo.max_msg);
+				       info->desc, info->tx_minfo.max_msg,
+				       info->max_rx_timeout_ms);
 	if (IS_ERR(info->raw)) {
 		dev_err(info->dev, "Failed to initialize SCMI RAW Mode !\n");
 		ret = PTR_ERR(info->raw);
@@ -2658,6 +2690,7 @@ static int scmi_debugfs_raw_mode_setup(struct scmi_info *info)
 static int scmi_probe(struct platform_device *pdev)
 {
 	int ret;
+	u32 timeout;
 	struct scmi_handle *handle;
 	const struct scmi_desc *desc;
 	struct scmi_info *info;
@@ -2705,6 +2738,11 @@ static int scmi_probe(struct platform_device *pdev)
 			 "SCMI System wide atomic threshold set to %d us\n",
 			 info->atomic_threshold);
 	handle->is_transport_atomic = scmi_is_transport_atomic;
+
+	if (!of_property_read_u32(np, "max-rx-timeout-ms", &timeout))
+		info->max_rx_timeout_ms = timeout;
+	else
+		info->max_rx_timeout_ms = info->desc->max_rx_timeout_ms;
 
 	if (desc->ops->link_supplier) {
 		ret = desc->ops->link_supplier(dev);
@@ -3026,6 +3064,7 @@ static int __init scmi_driver_init(void)
 	scmi_voltage_register();
 	scmi_system_register();
 	scmi_powercap_register();
+	scmi_pinctrl_register();
 
 	return platform_driver_register(&scmi_driver);
 }
@@ -3043,6 +3082,7 @@ static void __exit scmi_driver_exit(void)
 	scmi_voltage_unregister();
 	scmi_system_unregister();
 	scmi_powercap_unregister();
+	scmi_pinctrl_unregister();
 
 	scmi_transports_exit();
 

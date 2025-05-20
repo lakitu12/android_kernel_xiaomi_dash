@@ -36,11 +36,6 @@ struct sbitmap_word {
 	 * @cleared: word holding cleared bits
 	 */
 	unsigned long cleared ____cacheline_aligned_in_smp;
-
-	/**
-	 * @swap_lock: serializes simultaneous updates of ->word and ->cleared
-	 */
-	raw_spinlock_t swap_lock;
 } ____cacheline_aligned_in_smp;
 
 /**
@@ -185,7 +180,9 @@ static inline unsigned int __map_depth(const struct sbitmap *sb, int index)
 static inline void sbitmap_free(struct sbitmap *sb)
 {
 	free_percpu(sb->alloc_hint);
-	kvfree(sb->map);
+	if (!sb->map)
+		return;
+	kvfree(sb->map - 1);
 	sb->map = NULL;
 }
 

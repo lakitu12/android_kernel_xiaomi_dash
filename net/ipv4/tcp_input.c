@@ -80,6 +80,7 @@
 #include <linux/jump_label_ratelimit.h>
 #include <net/busy_poll.h>
 #include <net/mptcp.h>
+#include <trace/hooks/net.h>
 
 int sysctl_tcp_max_orphans __read_mostly = NR_FILE;
 
@@ -860,6 +861,8 @@ static void tcp_rtt_estimator(struct sock *sk, long mrtt_us)
 	struct tcp_sock *tp = tcp_sk(sk);
 	long m = mrtt_us; /* RTT */
 	u32 srtt = tp->srtt_us;
+
+	trace_android_vh_tcp_rtt_estimator(sk, mrtt_us);
 
 	/*	The following amusing code comes from Jacobson's
 	 *	article in SIGCOMM '88.  Note that rtt and mdev
@@ -2114,10 +2117,6 @@ void tcp_clear_retrans(struct tcp_sock *tp)
 	tp->undo_marker = 0;
 	tp->undo_retrans = -1;
 	tp->sacked_out = 0;
-	tp->rto_stamp = 0;
-	tp->total_rto = 0;
-	tp->total_rto_recoveries = 0;
-	tp->total_rto_time = 0;
 }
 
 static inline void tcp_init_undo(struct tcp_sock *tp)
@@ -2909,14 +2908,6 @@ void tcp_enter_recovery(struct sock *sk, bool ece_ack)
 	tcp_set_ca_state(sk, TCP_CA_Recovery);
 }
 
-static void tcp_update_rto_time(struct tcp_sock *tp)
-{
-	if (tp->rto_stamp) {
-		tp->total_rto_time += tcp_time_stamp(tp) - tp->rto_stamp;
-		tp->rto_stamp = 0;
-	}
-}
-
 /* Process an ACK in CA_Loss state. Move to CA_Open if lost data are
  * recovered or spurious. Otherwise retransmits more on partial ACKs.
  */
@@ -3121,8 +3112,6 @@ static void tcp_fastretrans_alert(struct sock *sk, const u32 prior_snd_una,
 		break;
 	case TCP_CA_Loss:
 		tcp_process_loss(sk, flag, num_dupack, rexmit);
-		if (icsk->icsk_ca_state != TCP_CA_Loss)
-			tcp_update_rto_time(tp);
 		tcp_identify_packet_loss(sk, ack_flag);
 		if (!(icsk->icsk_ca_state == TCP_CA_Open ||
 		      (*ack_flag & FLAG_LOST_RETRANS)))
@@ -3216,6 +3205,8 @@ static bool tcp_ack_update_rtt(struct sock *sk, const int flag,
 	rs->rtt_us = ca_rtt_us; /* RTT of last (S)ACKed packet (or -1) */
 	if (seq_rtt_us < 0)
 		return false;
+
+	trace_android_vh_tcp_update_rtt(sk, seq_rtt_us);
 
 	/* ca_rtt_us >= 0 is counting on the invariant that ca_rtt_us is
 	 * always taken together with ACK, SACK, or TS-opts. Any negative
@@ -3463,6 +3454,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, const struct sk_buff *ack_skb,
 		sack_rtt_us = tcp_stamp_us_delta(tp->tcp_mstamp, sack->first_sackt);
 		ca_rtt_us = tcp_stamp_us_delta(tp->tcp_mstamp, sack->last_sackt);
 	}
+	trace_android_vh_tcp_clean_rtx_queue(sk, flag, seq_rtt_us);
 	rtt_update = tcp_ack_update_rtt(sk, flag, seq_rtt_us, sack_rtt_us,
 					ca_rtt_us, sack->rate);
 
@@ -4536,6 +4528,8 @@ void tcp_fin(struct sock *sk)
 		tcp_sack_reset(&tp->rx_opt);
 
 	if (!sock_flag(sk, SOCK_DEAD)) {
+		trace_android_vh_tcp_sock_error(sk);
+
 		sk->sk_state_change(sk);
 
 		/* Do not send POLL_HUP for half duplex close. */
@@ -4597,6 +4591,8 @@ static void tcp_rcv_spurious_retrans(struct sock *sk, const struct sk_buff *skb)
 	 * The receiver remembers and reflects via DSACKs. Leverage the
 	 * DSACK state and change the txhash to re-route speculatively.
 	 */
+	 trace_android_rvh_tcp_rcv_spurious_retrans(sk);
+
 	if (TCP_SKB_CB(skb)->seq == tcp_sk(sk)->duplicate_sack[0].start_seq &&
 	    sk_rethink_txhash(sk))
 		NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPDUPLICATEDATAREHASH);
@@ -6116,6 +6112,7 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 
 			__tcp_ack_snd_check(sk, 0);
 no_ack:
+			trace_android_vh_tcp_rcv_established_fast_path(sk);
 			if (eaten)
 				kfree_skb_partial(skb, fragstolen);
 			tcp_data_ready(sk);
@@ -6155,6 +6152,8 @@ step5:
 
 	tcp_data_snd_check(sk);
 	tcp_ack_snd_check(sk);
+
+	trace_android_vh_tcp_rcv_established_slow_path(sk);
 	return;
 
 csum_error:
@@ -6365,6 +6364,8 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 
 		if (th->rst) {
 			tcp_reset(sk, skb);
+
+			trace_android_vh_tcp_state_change(sk, TCP_STATE_CHANGE_REASON_SYN_RST, 0);
 consume:
 			__kfree_skb(skb);
 			return 0;
@@ -6390,6 +6391,7 @@ consume:
 
 		tcp_ecn_rcv_synack(tp, th);
 
+		trace_android_vh_tcp_rcv_synack(icsk);
 		tcp_init_wl(tp, TCP_SKB_CB(skb)->seq);
 		tcp_try_undo_spurious_syn(sk);
 		tcp_ack(sk, skb, FLAG_SLOWPATH);
@@ -6560,17 +6562,9 @@ static void tcp_rcv_synrecv_state_fastopen(struct sock *sk)
 	if (inet_csk(sk)->icsk_ca_state == TCP_CA_Loss && !tp->packets_out)
 		tcp_try_undo_recovery(sk);
 
-	tcp_update_rto_time(tp);
+	/* Reset rtx states to prevent spurious retransmits_timed_out() */
+	tp->retrans_stamp = 0;
 	inet_csk(sk)->icsk_retransmits = 0;
-	/* In tcp_fastopen_synack_timer() on the first SYNACK RTO we set
-	 * retrans_stamp but don't enter CA_Loss, so in case that happened we
-	 * need to zero retrans_stamp here to prevent spurious
-	 * retransmits_timed_out(). However, if the ACK of our SYNACK caused us
-	 * to enter CA_Recovery then we need to leave retrans_stamp as it was
-	 * set entering CA_Recovery, for correct retransmits_timed_out() and
-	 * undo behavior.
-	 */
-	tcp_retrans_stamp_cleanup(sk);
 
 	/* Once we leave TCP_SYN_RECV or TCP_FIN_WAIT_1,
 	 * we no longer need req so release it.

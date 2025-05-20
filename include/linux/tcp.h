@@ -16,6 +16,7 @@
 
 #include <linux/skbuff.h>
 #include <linux/win_minmax.h>
+#include <linux/android_kabi.h>
 #include <net/sock.h>
 #include <net/inet_connection_sock.h>
 #include <net/inet_timewait_sock.h>
@@ -377,14 +378,6 @@ struct tcp_sock {
 				 * Total data bytes retransmitted
 				 */
 	u32	total_retrans;	/* Total retransmits for entire connection */
-	u32	rto_stamp;	/* Start time (ms) of last CA_Loss recovery */
-	u16	total_rto;	/* Total number of RTO timeouts, including
-				 * SYN/SYN-ACK and recurring timeouts.
-				 */
-	u16	total_rto_recoveries;	/* Total number of RTO recoveries,
-					 * including any unfinished recovery.
-					 */
-	u32	total_rto_time;	/* ms spent in (completed) RTO recoveries. */
 
 	u32	urg_seq;	/* Seq of received urgent pointer */
 	unsigned int		keepalive_time;	  /* time before keep alive takes place */
@@ -460,6 +453,9 @@ struct tcp_sock {
 	 */
 	struct request_sock __rcu *fastopen_rsk;
 	struct saved_syn *saved_syn;
+
+	ANDROID_OEM_DATA(1);
+	ANDROID_KABI_RESERVE(1);
 };
 
 enum tsq_enum {

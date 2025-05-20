@@ -6,6 +6,8 @@
  * Author: Rafael J. Wysocki <rafael.j.wysocki@intel.com>
  */
 
+#include <trace/hooks/sched.h>
+
 #define IOWAIT_BOOST_MIN	(SCHED_CAPACITY_SCALE / 8)
 
 struct sugov_tunables {
@@ -47,7 +49,7 @@ struct sugov_cpu {
 	u64			last_update;
 
 	unsigned long		util;
-	unsigned long		bw_min;
+	unsigned long		bw_dl;
 
 	/* The field below is for single-CPU policies only: */
 #ifdef CONFIG_NO_HZ_COMMON
@@ -81,20 +83,9 @@ static bool sugov_should_update_freq(struct sugov_policy *sg_policy, u64 time)
 	if (!cpufreq_this_cpu_can_update(sg_policy->policy))
 		return false;
 
-	if (unlikely(READ_ONCE(sg_policy->limits_changed))) {
-		WRITE_ONCE(sg_policy->limits_changed, false);
+	if (unlikely(sg_policy->limits_changed)) {
+		sg_policy->limits_changed = false;
 		sg_policy->need_freq_update = true;
-
-		/*
-		 * The above limits_changed update must occur before the reads
-		 * of policy limits in cpufreq_driver_resolve_freq() or a policy
-		 * limits update might be missed, so use a memory barrier to
-		 * ensure it.
-		 *
-		 * This pairs with the write memory barrier in sugov_limits().
-		 */
-		smp_mb();
-
 		return true;
 	}
 
@@ -165,8 +156,15 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 	struct cpufreq_policy *policy = sg_policy->policy;
 	unsigned int freq = arch_scale_freq_invariant() ?
 				policy->cpuinfo.max_freq : policy->cur;
+	unsigned long next_freq = 0;
 
-	freq = map_util_freq(util, freq, max);
+	util = map_util_perf(util);
+	trace_android_vh_map_util_freq(util, freq, max, &next_freq, policy,
+			&sg_policy->need_freq_update);
+	if (next_freq)
+		freq = next_freq;
+	else
+		freq = map_util_freq(util, freq, max);
 
 	if (freq == sg_policy->cached_raw_freq && !sg_policy->need_freq_update)
 		return sg_policy->next_freq;
@@ -175,30 +173,14 @@ static unsigned int get_next_freq(struct sugov_policy *sg_policy,
 	return cpufreq_driver_resolve_freq(policy, freq);
 }
 
-unsigned long sugov_effective_cpu_perf(int cpu, unsigned long actual,
-				 unsigned long min,
-				 unsigned long max)
-{
-	/* Add dvfs headroom to actual utilization */
-	actual = map_util_perf(actual);
-	/* Actually we don't need to target the max performance */
-	if (actual < max)
-		max = actual;
-
-	/*
-	 * Ensure at least minimum performance while providing more compute
-	 * capacity when possible.
-	 */
-	return max(min, max);
-}
-
 static void sugov_get_util(struct sugov_cpu *sg_cpu)
 {
-	unsigned long min, max, util = cpu_util_cfs_boost(sg_cpu->cpu);
+	unsigned long util = cpu_util_cfs_boost(sg_cpu->cpu);
+	struct rq *rq = cpu_rq(sg_cpu->cpu);
 
-	util = effective_cpu_util(sg_cpu->cpu, util, &min, &max);
-	sg_cpu->bw_min = min;
-	sg_cpu->util = sugov_effective_cpu_perf(sg_cpu->cpu, util, min, max);
+	sg_cpu->bw_dl = cpu_bw_dl(rq);
+	sg_cpu->util = effective_cpu_util(sg_cpu->cpu, util,
+					  FREQUENCY_UTIL, NULL);
 }
 
 /**
@@ -344,8 +326,8 @@ static inline bool sugov_cpu_is_busy(struct sugov_cpu *sg_cpu) { return false; }
  */
 static inline void ignore_dl_rate_limit(struct sugov_cpu *sg_cpu)
 {
-	if (cpu_bw_dl(cpu_rq(sg_cpu->cpu)) > sg_cpu->bw_min)
-		WRITE_ONCE(sg_cpu->sg_policy->limits_changed, true);
+	if (cpu_bw_dl(cpu_rq(sg_cpu->cpu)) > sg_cpu->bw_dl)
+		sg_cpu->sg_policy->limits_changed = true;
 }
 
 static inline bool sugov_update_single_common(struct sugov_cpu *sg_cpu,
@@ -445,8 +427,8 @@ static void sugov_update_single_perf(struct update_util_data *hook, u64 time,
 	    sugov_cpu_is_busy(sg_cpu) && sg_cpu->util < prev_util)
 		sg_cpu->util = prev_util;
 
-	cpufreq_driver_adjust_perf(sg_cpu->cpu, sg_cpu->bw_min,
-				   sg_cpu->util, max_cap);
+	cpufreq_driver_adjust_perf(sg_cpu->cpu, map_util_perf(sg_cpu->bw_dl),
+				   map_util_perf(sg_cpu->util), max_cap);
 
 	sg_cpu->sg_policy->last_freq_update_time = time;
 }
@@ -638,6 +620,7 @@ static int sugov_kthread_create(struct sugov_policy *sg_policy)
 	if (policy->fast_switch_enabled)
 		return 0;
 
+	trace_android_vh_set_sugov_sched_attr(&attr);
 	kthread_init_work(&sg_policy->work, sugov_work);
 	kthread_init_worker(&sg_policy->worker);
 	thread = kthread_create(kthread_worker_fn, &sg_policy->worker,
@@ -855,16 +838,7 @@ static void sugov_limits(struct cpufreq_policy *policy)
 		mutex_unlock(&sg_policy->work_lock);
 	}
 
-	/*
-	 * The limits_changed update below must take place before the updates
-	 * of policy limits in cpufreq_set_policy() or a policy limits update
-	 * might be missed, so use a memory barrier to ensure it.
-	 *
-	 * This pairs with the memory barrier in sugov_should_update_freq().
-	 */
-	smp_wmb();
-
-	WRITE_ONCE(sg_policy->limits_changed, true);
+	sg_policy->limits_changed = true;
 }
 
 struct cpufreq_governor schedutil_gov = {
@@ -886,29 +860,3 @@ struct cpufreq_governor *cpufreq_default_governor(void)
 #endif
 
 cpufreq_governor_init(schedutil_gov);
-
-#ifdef CONFIG_ENERGY_MODEL
-static void rebuild_sd_workfn(struct work_struct *work)
-{
-	rebuild_sched_domains_energy();
-}
-static DECLARE_WORK(rebuild_sd_work, rebuild_sd_workfn);
-
-/*
- * EAS shouldn't be attempted without sugov, so rebuild the sched_domains
- * on governor changes to make sure the scheduler knows about it.
- */
-void sched_cpufreq_governor_change(struct cpufreq_policy *policy,
-				  struct cpufreq_governor *old_gov)
-{
-	if (old_gov == &schedutil_gov || policy->governor == &schedutil_gov) {
-		/*
-		 * When called from the cpufreq_register_driver() path, the
-		 * cpu_hotplug_lock is already held, so use a work item to
-		 * avoid nested locking in rebuild_sched_domains().
-		 */
-		schedule_work(&rebuild_sd_work);
-	}
-
-}
-#endif

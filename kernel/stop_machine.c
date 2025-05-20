@@ -152,6 +152,7 @@ int stop_one_cpu(unsigned int cpu, cpu_stop_fn_t fn, void *arg)
 	wait_for_completion(&done.completion);
 	return done.ret;
 }
+EXPORT_SYMBOL_GPL(stop_one_cpu);
 
 /* This controls the threads on each CPU. */
 enum multi_stop_state {
@@ -250,8 +251,8 @@ static int multi_cpu_stop(void *data)
 			 * be detected and reported on their side.
 			 */
 			touch_nmi_watchdog();
+			rcu_momentary_dyntick_idle();
 		}
-		rcu_momentary_dyntick_idle();
 	} while (curstate != MULTI_STOP_EXIT);
 
 	local_irq_restore(flags);
@@ -387,6 +388,7 @@ bool stop_one_cpu_nowait(unsigned int cpu, cpu_stop_fn_t fn, void *arg,
 	*work_buf = (struct cpu_stop_work){ .fn = fn, .arg = arg, .caller = _RET_IP_, };
 	return cpu_stop_queue_work(cpu, work_buf);
 }
+EXPORT_SYMBOL_GPL(stop_one_cpu_nowait);
 
 static bool queue_stop_cpus_work(const struct cpumask *cpumask,
 				 cpu_stop_fn_t fn, void *arg,

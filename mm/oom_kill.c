@@ -53,6 +53,8 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/oom.h>
+#undef CREATE_TRACE_POINTS
+#include <trace/hooks/mm.h>
 
 static int sysctl_panic_on_oom;
 static int sysctl_oom_kill_allocating_task;
@@ -422,7 +424,7 @@ static int dump_task(struct task_struct *p, void *arg)
  * State information includes task's pid, uid, tgid, vm size, rss,
  * pgtables_bytes, swapents, oom_score_adj value, and name.
  */
-static void dump_tasks(struct oom_control *oc)
+void dump_tasks(struct oom_control *oc)
 {
 	pr_info("Tasks state (memory values in pages):\n");
 	pr_info("[  pid  ]   uid  tgid total_vm      rss pgtables_bytes swapents oom_score_adj name\n");
@@ -443,6 +445,7 @@ static void dump_tasks(struct oom_control *oc)
 		rcu_read_unlock();
 	}
 }
+EXPORT_SYMBOL_GPL(dump_tasks);
 
 static void dump_oom_summary(struct oom_control *oc, struct task_struct *victim)
 {
@@ -514,7 +517,7 @@ static DECLARE_WAIT_QUEUE_HEAD(oom_reaper_wait);
 static struct task_struct *oom_reaper_list;
 static DEFINE_SPINLOCK(oom_reaper_lock);
 
-static bool __oom_reap_task_mm(struct mm_struct *mm)
+bool __oom_reap_task_mm(struct mm_struct *mm)
 {
 	struct vm_area_struct *vma;
 	bool ret = true;
@@ -528,6 +531,7 @@ static bool __oom_reap_task_mm(struct mm_struct *mm)
 	 */
 	set_bit(MMF_UNSTABLE, &mm->flags);
 
+	trace_android_vh_oom_swapmem_gather_init(mm);
 	for_each_vma(vmi, vma) {
 		if (vma->vm_flags & (VM_HUGETLB|VM_PFNMAP))
 			continue;
@@ -560,9 +564,11 @@ static bool __oom_reap_task_mm(struct mm_struct *mm)
 			tlb_finish_mmu(&tlb);
 		}
 	}
+	trace_android_vh_oom_swapmem_gather_finish(mm);
 
 	return ret;
 }
+EXPORT_SYMBOL_GPL(__oom_reap_task_mm);
 
 /*
  * Reaps the address space of the give task.
@@ -751,6 +757,19 @@ static inline void queue_oom_reaper(struct task_struct *tsk)
 #endif /* CONFIG_MMU */
 
 /**
+ * tsk->mm has to be non NULL and caller has to guarantee it is stable (either
+ * under task_lock or operate on the current).
+ */
+static void __mark_oom_victim(struct task_struct *tsk)
+{
+	struct mm_struct *mm = tsk->mm;
+
+	if (!cmpxchg(&tsk->signal->oom_mm, NULL, mm)) {
+		mmgrab(tsk->signal->oom_mm);
+	}
+}
+
+/**
  * mark_oom_victim - mark the given task as OOM victim
  * @tsk: task to mark
  *
@@ -763,7 +782,6 @@ static inline void queue_oom_reaper(struct task_struct *tsk)
 static void mark_oom_victim(struct task_struct *tsk)
 {
 	const struct cred *cred;
-	struct mm_struct *mm = tsk->mm;
 
 	WARN_ON(oom_killer_disabled);
 	/* OOM killer might race with memcg OOM */
@@ -771,8 +789,7 @@ static void mark_oom_victim(struct task_struct *tsk)
 		return;
 
 	/* oom_mm is bound to the signal struct life time. */
-	if (!cmpxchg(&tsk->signal->oom_mm, NULL, mm))
-		mmgrab(tsk->signal->oom_mm);
+	__mark_oom_victim(tsk);
 
 	/*
 	 * Make sure that the task is woken up from uninterruptible sleep
@@ -1264,4 +1281,17 @@ put_task:
 #else
 	return -ENOSYS;
 #endif /* CONFIG_MMU */
+}
+
+void add_to_oom_reaper(struct task_struct *p)
+{
+	p = find_lock_task_mm(p);
+	if (!p)
+		return;
+
+	if (task_will_free_mem(p)) {
+		__mark_oom_victim(p);
+		queue_oom_reaper(p);
+	}
+	task_unlock(p);
 }

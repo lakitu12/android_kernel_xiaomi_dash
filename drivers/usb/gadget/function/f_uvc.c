@@ -263,9 +263,12 @@ uvc_function_setup(struct usb_function *f, const struct usb_ctrlrequest *ctrl)
 	return 0;
 }
 
-void uvc_function_setup_continue(struct uvc_device *uvc)
+void uvc_function_setup_continue(struct uvc_device *uvc, int disable_ep)
 {
 	struct usb_composite_dev *cdev = uvc->func.config->cdev;
+
+	if (disable_ep && uvc->video.ep)
+		usb_ep_disable(uvc->video.ep);
 
 	usb_composite_setup_continue(cdev);
 }
@@ -337,15 +340,11 @@ uvc_function_set_alt(struct usb_function *f, unsigned interface, unsigned alt)
 		if (uvc->state != UVC_STATE_STREAMING)
 			return 0;
 
-		if (uvc->video.ep)
-			usb_ep_disable(uvc->video.ep);
-
 		memset(&v4l2_event, 0, sizeof(v4l2_event));
 		v4l2_event.type = UVC_EVENT_STREAMOFF;
 		v4l2_event_queue(&uvc->vdev, &v4l2_event);
 
-		uvc->state = UVC_STATE_CONNECTED;
-		return 0;
+		return USB_GADGET_DELAYED_STATUS;
 
 	case 1:
 		if (uvc->state != UVC_STATE_CONNECTED)
@@ -981,6 +980,8 @@ static void uvc_function_unbind(struct usb_configuration *c,
 	long wait_ret = 1;
 
 	uvcg_info(f, "%s()\n", __func__);
+
+	kthread_cancel_work_sync(&video->hw_submit);
 
 	if (video->async_wq)
 		destroy_workqueue(video->async_wq);

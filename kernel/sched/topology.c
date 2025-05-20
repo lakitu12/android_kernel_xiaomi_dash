@@ -4,8 +4,12 @@
  */
 
 #include <linux/bsearch.h>
+#include <trace/hooks/sched.h>
 
 DEFINE_MUTEX(sched_domains_mutex);
+#ifdef CONFIG_LOCKDEP
+EXPORT_SYMBOL_GPL(sched_domains_mutex);
+#endif
 
 /* Protected by sched_domains_mutex: */
 static cpumask_var_t sched_domains_tmpmask;
@@ -349,8 +353,7 @@ static void sched_energy_set(bool has_eas)
  *    2. the SD_ASYM_CPUCAPACITY flag is set in the sched_domain hierarchy.
  *    3. no SMT is detected.
  *    4. the EM complexity is low enough to keep scheduling overheads low;
- *    5. schedutil is driving the frequency of all CPUs of the rd;
- *    6. frequency invariance support is present;
+ *    5. frequency invariance support is present;
  *
  * The complexity of the Energy Model is defined as:
  *
@@ -370,21 +373,23 @@ static void sched_energy_set(bool has_eas)
  */
 #define EM_MAX_COMPLEXITY 2048
 
-extern struct cpufreq_governor schedutil_gov;
 static bool build_perf_domains(const struct cpumask *cpu_map)
 {
 	int i, nr_pd = 0, nr_ps = 0, nr_cpus = cpumask_weight(cpu_map);
 	struct perf_domain *pd = NULL, *tmp;
 	int cpu = cpumask_first(cpu_map);
 	struct root_domain *rd = cpu_rq(cpu)->rd;
-	struct cpufreq_policy *policy;
-	struct cpufreq_governor *gov;
+	bool eas_check = false;
 
 	if (!sysctl_sched_energy_aware)
 		goto free;
 
-	/* EAS is enabled for asymmetric CPU capacity topologies. */
-	if (!per_cpu(sd_asym_cpucapacity, cpu)) {
+	/*
+	 * EAS is enabled for asymmetric CPU capacity topologies.
+	 * Allow vendor to override if desired.
+	 */
+	trace_android_rvh_build_perf_domains(&eas_check);
+	if (!per_cpu(sd_asym_cpucapacity, cpu) && !eas_check) {
 		if (sched_debug()) {
 			pr_info("rd %*pbl: CPUs do not have asymmetric capacities\n",
 					cpumask_pr_args(cpu_map));
@@ -411,19 +416,6 @@ static bool build_perf_domains(const struct cpumask *cpu_map)
 		/* Skip already covered CPUs. */
 		if (find_pd(pd, i))
 			continue;
-
-		/* Do not attempt EAS if schedutil is not being used. */
-		policy = cpufreq_cpu_get(i);
-		if (!policy)
-			goto free;
-		gov = policy->governor;
-		cpufreq_cpu_put(policy);
-		if (gov != &schedutil_gov) {
-			if (rd->pd)
-				pr_warn("rd %*pbl: Disabling EAS, schedutil is mandatory\n",
-						cpumask_pr_args(cpu_map));
-			goto free;
-		}
 
 		/* Create the new pd and add it to the local list. */
 		tmp = pd_init(i);
@@ -2486,15 +2478,12 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 	/* Attach the domains */
 	rcu_read_lock();
 	for_each_cpu(i, cpu_map) {
-		unsigned long capacity;
-
 		rq = cpu_rq(i);
 		sd = *per_cpu_ptr(d.sd, i);
 
-		capacity = arch_scale_cpu_capacity(i);
 		/* Use READ_ONCE()/WRITE_ONCE() to avoid load/store tearing: */
-		if (capacity > READ_ONCE(d.rd->max_cpu_capacity))
-			WRITE_ONCE(d.rd->max_cpu_capacity, capacity);
+		if (rq->cpu_capacity_orig > READ_ONCE(d.rd->max_cpu_capacity))
+			WRITE_ONCE(d.rd->max_cpu_capacity, rq->cpu_capacity_orig);
 
 		cpu_attach_domain(sd, d.rd, i);
 	}
@@ -2507,6 +2496,7 @@ build_sched_domains(const struct cpumask *cpu_map, struct sched_domain_attr *att
 		pr_info("root domain span: %*pbl (max cpu_capacity = %lu)\n",
 			cpumask_pr_args(cpu_map), rq->rd->max_cpu_capacity);
 	}
+	trace_android_vh_build_sched_domains(has_asym);
 
 	ret = 0;
 error:
