@@ -183,27 +183,29 @@ EXPORT_PER_CPU_SYMBOL(numa_node);
 DEFINE_STATIC_KEY_TRUE(vm_numa_stat_key);
 
 /*
- * By default, when restrict_cma_redirect is false, all movable allocations
+ * By default, restrict_cma_redirect is set to true, so only MOVABLE allocations
+ * marked __GFP_CMA are eligible to be redirected to CMA region. These allocations
+ * are redirected if *any* free space is available in the CMA region.
+ * When restrict_cma_redirect is false, all movable allocations
  * are eligible for redirection to CMA region (i.e movable allocations are
  * not restricted from CMA region), when there is sufficient space there.
  * (see __rmqueue()).
- *
- * If restrict_cma_redirect is set to true, only MOVABLE allocations marked
- * __GFP_CMA are eligible to be redirected to CMA region. These allocations
- * are redirected if *any* free space is available in the CMA region.
  */
-DEFINE_STATIC_KEY_FALSE(restrict_cma_redirect);
+DEFINE_STATIC_KEY_TRUE(restrict_cma_redirect);
 
 static int __init restrict_cma_redirect_setup(char *str)
 {
 #ifdef CONFIG_CMA
-	static_branch_enable(&restrict_cma_redirect);
+	bool res;
+
+	if (!kstrtobool(str, &res) && !res)
+		static_branch_disable(&restrict_cma_redirect);
 #else
 	pr_warn("CONFIG_CMA not set. Ignoring restrict_cma_redirect option\n");
 #endif
 	return 1;
 }
-__setup("restrict_cma_redirect", restrict_cma_redirect_setup);
+__setup("restrict_cma_redirect=", restrict_cma_redirect_setup);
 
 static inline bool cma_redirect_restricted(void)
 {
@@ -711,7 +713,7 @@ void destroy_large_folio(struct folio *folio)
 		return;
 	}
 
-	folio_undo_large_rmappable(folio);
+	folio_unqueue_deferred_split(folio);
 	mem_cgroup_uncharge(folio);
 	free_the_page(&folio->page, folio_order(folio));
 }
@@ -887,9 +889,19 @@ static inline void __free_one_page(struct page *page,
 	struct page *buddy;
 	bool to_tail;
 	int max_order = zone_max_order(zone);
+	bool bypass = false;
+	unsigned long check_flags;
+
+	trace_android_vh_free_one_page_bypass(page, zone, order,
+		migratetype, (int)fpi_flags, &bypass);
+
+	if (bypass)
+		return;
 
 	VM_BUG_ON(!zone_is_initialized(zone));
-	VM_BUG_ON_PAGE(page->flags & PAGE_FLAGS_CHECK_AT_PREP, page);
+	check_flags = PAGE_FLAGS_CHECK_AT_PREP;
+	trace_android_vh_free_one_page_flag_check(&check_flags);
+	VM_BUG_ON_PAGE(page->flags & check_flags, page);
 
 	VM_BUG_ON(migratetype == -1);
 	if (likely(!is_migrate_isolate(migratetype)))
@@ -2067,6 +2079,7 @@ static void reserve_highatomic_pageblock(struct page *page, struct zone *zone)
 {
 	int mt;
 	unsigned long max_managed, flags;
+	bool bypass = false;
 
 	/*
 	 * The number reserved as: minimum is 1 pageblock, maximum is
@@ -2078,6 +2091,9 @@ static void reserve_highatomic_pageblock(struct page *page, struct zone *zone)
 		return;
 	max_managed = ALIGN((zone_managed_pages(zone) / 100), pageblock_nr_pages);
 	if (zone->nr_reserved_highatomic >= max_managed)
+		return;
+	trace_android_vh_reserve_highatomic_bypass(page, &bypass);
+	if (bypass)
 		return;
 
 	spin_lock_irqsave(&zone->lock, flags);
@@ -2281,7 +2297,11 @@ static __always_inline struct page *
 __rmqueue(struct zone *zone, unsigned int order, int migratetype,
 						unsigned int alloc_flags)
 {
-	struct page *page;
+	struct page *page = NULL;
+
+	trace_android_vh_rmqueue_smallest_bypass(&page, zone, order, migratetype);
+	if (page)
+		return page;
 
 	if (IS_ENABLED(CONFIG_CMA)) {
 		/*
@@ -2664,6 +2684,7 @@ void free_unref_page_list(struct list_head *list)
 	struct zone *locked_zone = NULL;
 	int batch_count = 0;
 	int migratetype;
+	bool skip_free = false;
 
 	/* Prepare pages for freeing */
 	list_for_each_entry_safe(page, next, list, lru) {
@@ -2684,6 +2705,10 @@ void free_unref_page_list(struct list_head *list)
 			continue;
 		}
 	}
+
+	trace_android_vh_free_unref_page_list_bypass(list, &skip_free);
+	if (skip_free)
+		return;
 
 	list_for_each_entry_safe(page, next, list, lru) {
 		struct zone *zone = page_zone(page);
@@ -3190,6 +3215,7 @@ static inline bool zone_watermark_fast(struct zone *z, unsigned int order,
 				unsigned int alloc_flags, gfp_t gfp_mask)
 {
 	long free_pages;
+	bool is_watermark_ok = false;
 
 	if (!zone_is_suitable(z, order))
 		return false;
@@ -3212,6 +3238,10 @@ static inline bool zone_watermark_fast(struct zone *z, unsigned int order,
 		if (usable_free > mark + z->lowmem_reserve[highest_zoneidx])
 			return true;
 	}
+
+	trace_android_vh_watermark_fast_ok(order, gfp_mask, &is_watermark_ok);
+	if (is_watermark_ok)
+		return true;
 
 	if (__zone_watermark_ok(z, order, mark, highest_zoneidx, alloc_flags,
 					free_pages))
@@ -3330,6 +3360,7 @@ get_page_from_freelist(gfp_t gfp_mask, unsigned int order, int alloc_flags,
 	struct pglist_data *last_pgdat = NULL;
 	bool last_pgdat_dirty_ok = false;
 	bool no_fallback;
+	bool should_skip_zone = false;
 
 retry:
 	/*
@@ -3344,6 +3375,11 @@ retry:
 		unsigned long mark;
 
 		if (!zone_is_suitable(zone, order))
+			continue;
+
+		trace_android_vh_should_skip_zone(zone, gfp_mask, order,
+			ac->migratetype, &should_skip_zone);
+		if (should_skip_zone)
 			continue;
 
 		if (cpusets_enabled() &&
@@ -5912,6 +5948,7 @@ static void calculate_totalreserve_pages(void)
 	struct pglist_data *pgdat;
 	unsigned long reserve_pages = 0;
 	enum zone_type i, j;
+	bool skip = false;
 
 	for_each_online_pgdat(pgdat) {
 
@@ -5940,6 +5977,10 @@ static void calculate_totalreserve_pages(void)
 		}
 	}
 	totalreserve_pages = reserve_pages;
+	trace_android_vh_calculate_totalreserve_pages(&skip);
+	if (skip)
+		return;
+	trace_mm_calculate_totalreserve_pages(totalreserve_pages);
 }
 
 /*
@@ -5969,6 +6010,8 @@ static void setup_per_zone_lowmem_reserve(void)
 					zone->lowmem_reserve[j] = 0;
 				else
 					zone->lowmem_reserve[j] = managed_pages / ratio;
+				trace_mm_setup_per_zone_lowmem_reserve(zone, upper_zone,
+								       zone->lowmem_reserve[j]);
 			}
 		}
 	}
@@ -6033,6 +6076,7 @@ static void __setup_per_zone_wmarks(void)
 		zone->_watermark[WMARK_HIGH] = low_wmark_pages(zone) + tmp;
 		zone->_watermark[WMARK_PROMO] = high_wmark_pages(zone) + tmp;
 		trace_android_vh_init_adjust_zone_wmark(zone, tmp);
+		trace_mm_setup_per_zone_wmarks(zone);
 
 		spin_unlock_irqrestore(&zone->lock, flags);
 	}
