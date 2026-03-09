@@ -442,6 +442,10 @@ int __pkvm_guest_relinquish_to_host(struct pkvm_hyp_vcpu *vcpu,
 		goto end;
 
 	WARN_ON(host_stage2_set_owner_locked(data.pa, PAGE_SIZE, PKVM_ID_HOST));
+
+	if (pkvm_ipa_range_has_pvmfw(vm, ipa, ipa + PAGE_SIZE))
+		vm->kvm.arch.pkvm.pvmfw_load_addr = PVMFW_INVALID_LOAD_ADDR;
+
 end:
 	guest_unlock_component(vm);
 	host_unlock_component();
@@ -3043,6 +3047,26 @@ int host_stage2_get_leaf(phys_addr_t phys, kvm_pte_t *ptep, u32 *level)
 	host_unlock_component();
 
 	return ret;
+}
+
+int guest_stage2_pa(struct pkvm_hyp_vm *vm, u64 ipa, phys_addr_t *phys)
+{
+	kvm_pte_t pte;
+	u32 level;
+	int ret;
+
+	guest_lock_component(vm);
+	ret = kvm_pgtable_get_leaf(&vm->pgt, ipa, &pte, &level);
+	guest_unlock_component(vm);
+
+	if (ret)
+		return ret;
+
+	if (!kvm_pte_valid(pte) || level != KVM_PGTABLE_MAX_LEVELS - 1)
+		return -EINVAL;
+
+	*phys = kvm_pte_to_phys(pte);
+	return 0;
 }
 
 #ifdef CONFIG_NVHE_EL2_DEBUG

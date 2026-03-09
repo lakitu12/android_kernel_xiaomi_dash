@@ -147,6 +147,10 @@ static inline enum zone_type __gfp_zone(gfp_t flags)
 	    !static_branch_unlikely(&movablecore_enabled) && !movable_node_is_enabled())
 		return LAST_VIRT_ZONE;
 
+	 /* Allow dma-buf etc to use virtual zones, if there is no movable zone */
+	if ((flags & __GFP_COMP) && (flags & __GFP_HIGHMEM) &&
+	    !static_branch_unlikely(&movablecore_enabled) && !movable_node_is_enabled())
+		return LAST_VIRT_ZONE;
 
 	return z;
 }

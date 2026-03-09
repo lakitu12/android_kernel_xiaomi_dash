@@ -129,32 +129,6 @@
   mmc_set_blocklen
   nr_free_buffer_pages
 
-#required by metis.ko module
-  __traceiter_android_vh_rwsem_read_wait_start
-  __traceiter_android_vh_rwsem_write_wait_start
-  __traceiter_android_vh_mutex_wait_start
-  __traceiter_android_vh_alter_mutex_list_add
-  __traceiter_android_rvh_cpuset_fork
-  __traceiter_android_vh_sched_setaffinity_early
-  __traceiter_android_rvh_set_cpus_allowed_comm
-  __traceiter_android_rvh_dequeue_task
-  __tracepoint_android_vh_rwsem_read_wait_start
-  __tracepoint_android_vh_rwsem_write_wait_start
-  __tracepoint_android_vh_mutex_wait_start
-  __tracepoint_android_vh_alter_mutex_list_add
-  __tracepoint_android_rvh_cpuset_fork
-  __tracepoint_android_vh_sched_setaffinity_early
-  __tracepoint_android_rvh_set_cpus_allowed_comm
-  __tracepoint_android_rvh_dequeue_task
-  cpuset_cpus_allowed
-  cpufreq_update_policy
-  cgroup_threadgroup_rwsem
-
-#required by millet.ko
-  __traceiter_android_rvh_refrigerator
-  __tracepoint_android_rvh_refrigerator
-  freezer_cgrp_subsys
-
 # required by trace_hook.ko
   android_rvh_probe_register
   __traceiter_android_rvh_context_switch
@@ -172,16 +146,6 @@
   __tracepoint_android_vh_free_mod_mem
   __tracepoint_android_vh_set_mod_perm_after_init
   __tracepoint_android_vh_set_mod_perm_before_init
-
-#required by mi_sched.ko
-  __traceiter_android_vh_scheduler_tick
-  __traceiter_android_vh_free_user
-  __traceiter_android_vh_alloc_uid
-  __tracepoint_android_vh_scheduler_tick
-  __tracepoint_android_vh_free_user
-  __tracepoint_android_vh_alloc_uid
-  free_uid
-  find_user
 
 #required by mi_freqwdg.ko
   __traceiter_android_vh_freq_qos_remove_request
@@ -494,10 +458,6 @@ reclaim_pages
 __tracepoint_android_vh_alloc_flags_cma_adjust
 __traceiter_android_vh_alloc_flags_cma_adjust
 
-# required by xr-qi.ko
-__tracepoint_android_vh_futex_wait_queue_start
-__traceiter_android_vh_futex_wait_queue_start
-
 # required by zsmalloc.ko
 __traceiter_android_vh_zs_shrinker_adjust
 __traceiter_android_vh_zs_shrinker_bypass
@@ -524,8 +484,19 @@ __traceiter_android_vh_gzvm_handle_demand_page_post
 __tracepoint_android_vh_gzvm_handle_demand_page_pre
 __tracepoint_android_vh_gzvm_handle_demand_page_post
 
+# required by pte preread
+read_swap_cache_async
+unuse_swap_pte
+__pte_offset_map
+vfs_fadvise
+
 # required by launch_boost driver
+__traceiter_android_vh_mmput_mm
+__tracepoint_android_vh_mmput_mm
 __traceiter_android_vh_filemap_read
 __tracepoint_android_vh_filemap_read
 __traceiter_android_vh_filemap_map_pages_range
 __tracepoint_android_vh_filemap_map_pages_range
+
+__traceiter_android_vh_pageset_update
+__tracepoint_android_vh_pageset_update
