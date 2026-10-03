@@ -72,9 +72,14 @@ v15（devapc 撤销回原厂，判别实验定案 devapc 无罪）。v15 净差�
 
 镜像文件：`~/hermes_work/vendor_boot_a_nogz_patched_v15_devapc_on.img`
 （md5 `449da7a8…`，sha256 `6093b684…`，元数据 `v15_meta.json`）。
+字节级细节（实际偏移/指令/取证方法）见同目录 `vendor-boot-v15-changeset.md`
+——该文档以 cpio 逐文件 md5 对比与 header 结构解析为准，修正了早期
+"log_store NOP 在 0x1be4"的旧记录（实际线上链打的是 0xb88）。
 构建脚本（等长 DTB/ko 手术范式，防 magiskboot v31 repack 破坏 AVB image_size 的
 历史坑，一律手写二进制编辑）：`build_v14_mali.py`、`build_v15_devapc_on.py`、
-`patch_vendorboot.py`、`build_nvhe_safe.py`（boot 侧字节手术——已被 §1.1 取代，退役）。
+`repack_v8/v10/v11/v12.py`、`patch_vendorboot.py`（未上线的早期变体，产物
+`1b83ddc7` 系 ko 不在 v15 内）、`build_nvhe_safe.py`（boot 侧字节手术——已被
+§1.1 取代，退役）。
 
 ## 3. 分层职责速查
 
