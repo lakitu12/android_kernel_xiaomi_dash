@@ -118,6 +118,10 @@ fi
 grep -q "TRACE_SYSTEM dash_os4_stub" "$H" || fail "hook header TRACE_SYSTEM wrong"
 grep -q 'include <trace/hooks/dash_os4_stub.h>' "$TREE/drivers/android/vendor_hooks.c" \
   || fail "vendor_hooks.c does not include the stub header"
+[ -f "$TREE/drivers/android/dash_os4_decl_exports.c" ] \
+  || fail "declaration-only export TU is missing"
+grep -q 'dash_os4_decl_exports.o' "$TREE/drivers/android/Makefile" \
+  || fail "declaration-only export TU not hooked into drivers/android/Makefile"
 # hook -> call-site group (must match the patch groups above)
 hook_group() {
   case "$1" in
@@ -133,7 +137,11 @@ hook_group() {
 
 for h in $HOOKS; do
   grep -q "DECLARE_HOOK($h," "$H" || fail "DECLARE_HOOK($h) missing"
-  grep -q "EXPORT_TRACEPOINT_SYMBOL_GPL($h);" "$TREE/drivers/android/vendor_hooks.c" \
+  # 13 个 export 里，mmap_lock_init/_free 按 stock 布局放在只声明的 TU 里
+  # （genksyms 只在“没看到 DEFINE_TRACE_FN 定义”时才算出 stock 的 CRC，见 README）
+  grep -q "EXPORT_TRACEPOINT_SYMBOL_GPL($h);" \
+      "$TREE/drivers/android/vendor_hooks.c" \
+      "$TREE/drivers/android/dash_os4_decl_exports.c" 2>/dev/null \
     || fail "export of $h missing"
   g=$(hook_group "$h")
   case " $SITES " in
