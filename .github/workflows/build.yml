@@ -240,26 +240,26 @@ jobs:
 
           # SUSFS kernel-side files + GKI patch. Branch gki-android15-6.6 EXISTS
           # (verified: 50_add_susfs_in_gki-android15-6.6.patch present, HTTP 200).
-          # DRIFT GUARD #2 (run 34444400054, 2026-09-10): the susfs branch floated too.
-          # HEAD@3f0b811 (2026-09-06) added `ksu_install_su_fd()` into the fs/exec.c
-          # hook, but NO SukiSU builtin commit (4.1.3 or 4.2.0) implements that symbol
-          # -> ld.lld "undefined symbol: ksu_install_su_fd" at vmlinux link (~18min).
-          # Frontier search (2026-09-10): 937215c..8224c73 touches ONLY
-          # KernelSU/10_enable_susfs_for_ksu.patch (never applied by this workflow -
-          # we use the SukiSU builtin tree), so consumed files are byte-identical to
-          # the run #11/#14-verified state; 8224c73 = latest feasible before
-          # 3f0b811's ksu_install_su_fd demand (missing from ALL builtin commits).
-          SUSFS_PIN=8224c73ba76fbfbcbfc1fe0c16970fbd9baad2e0
+          # The KSU and SUSFS pins are a PAIR: both must come from the same window,
+          # because the interface drifts in both directions (see the static gate
+          # below, which now checks both). History:
+          #   run 34444400054 (2026-09-10): susfs HEAD added a ksu_install_su_fd()
+          #     call -> "undefined symbol" at vmlinux link (~18 min); re-pinned
+          #     SUSFS back to 8224c73, the frontier before that demand.
+          #   2026-10-29: KSU bumped to builtin@b5917072, which calls
+          #     susfs_parse_priority_app_strings()/susfs_set_priority_uid_filter()
+          #     and uses CMD_SUSFS_SET_PRIORITY_UID_FILTER -> 8224c73 lacks all
+          #     three (run 40811464365 died in drivers/kernelsu/supercall/dispatch.c
+          #     after ~9 min). c05208e "susfs: Add priority uid filter" introduces
+          #     them; pin the branch tip, which also carries c05208e's follow-up
+          #     UAF fix (0606e19).
+          SUSFS_PIN=0606e19afae93ffc88e53883dbf3cfced62a7b59
           git clone -q https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android15-6.6 /tmp/susfs4ksu
           git -C /tmp/susfs4ksu checkout -q "$SUSFS_PIN"
-          # Fail-fast #2: kernel-side patch must not reference driver symbols the pinned
-          # KSU tree lacks (catches the 3f0b811-class drift in seconds, not at link):
+          # Fail-fast #2 (the full both-direction check runs right after the 50_
+          # patch is applied, once every kernel-side SUSFS file is in place).
           SFX=/tmp/susfs4ksu/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch
-          if grep -q 'ksu_install_su_fd' "$SFX" && ! grep -rq 'ksu_install_su_fd' common/drivers/kernelsu/; then
-            echo "::error::susfs4ksu@$(git -C /tmp/susfs4ksu rev-parse --short HEAD) requires ksu_install_su_fd() absent from SukiSU $KSU_PIN - re-pin both together"
-            exit 1
-          fi
-          echo "susfs4ksu pinned $(git -C /tmp/susfs4ksu rev-parse --short HEAD): driver symbol deps OK"
+          echo "susfs4ksu pinned $(git -C /tmp/susfs4ksu rev-parse --short HEAD)"
           SUSFS_VER=$(grep -m1 'SUSFS_VERSION' /tmp/susfs4ksu/kernel_patches/include/linux/susfs.h | cut -d'"' -f2 || echo unknown)
           echo "SUSFS $SUSFS_VER"
           cp -v /tmp/susfs4ksu/kernel_patches/fs/* common/fs/
@@ -267,6 +267,10 @@ jobs:
           cd common
           echo "=== apply 50_add_susfs_in_gki-android15-6.6.patch ==="
           patch -p1 < /tmp/susfs4ksu/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch
+          # Both-direction pairing gate: fails here in ~1 s instead of in the
+          # compiler ~9-18 min later if either pin drifted.
+          python3 "$GITHUB_WORKSPACE/.github/scripts/check-susfs-pair.py" \
+            --tree . --ksu drivers/kernelsu --susfs-patch "$SFX"
 
           # KSU + KPM + SUSFS configs (mirrors WildKernels known-good set)
           DEFCONFIG=~/gki/common/arch/arm64/configs/gki_defconfig
