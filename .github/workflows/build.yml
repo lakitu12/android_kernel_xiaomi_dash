@@ -107,6 +107,21 @@ jobs:
 
           git diff --stat || true
 
+      # OS4(6.6.118) 的厂商模块 import 了 13 个 AOSP 6.6 源里不存在的 MTK vendor-hook
+      # tracepoint（node_cache 4 + os_cpu_qi 9），另 LZ4_compress_default 被
+      # TRIM_UNUSED_KSYMS 裁掉导出。实测：638 个 .ko / 3652 个必需符号，自编内核缺 14，
+      # stock 缺 0（~/下载/dash-os4/kernel-symbol-gap.md）。
+      # 本步骤补「定义 + 导出 + KMI 白名单 + call site」：TP_PROTO 由 stock 内核/模块的
+      # KCFI 类型哈希逐位反推，call site 由 stock 反汇编逐点定位；构建后再由
+      # verify-os4-kcfi.py 断言哈希一致，否则 hook 一触发就 #brk。
+      - name: Inject OS4 vendor hooks (14-symbol gap + call sites)
+        run: |
+          set -e
+          cd ~/gki
+          if [ -d common ]; then KDIR=common; elif [ -d kernel/common ]; then KDIR=kernel/common; else KDIR=$(find . -name "Kconfig" -path "*/arch/arm64/*" | head -n1 | xargs dirname | xargs dirname | xargs dirname); fi
+          echo "KDIR=$KDIR"
+          KDIR="$HOME/gki/$KDIR" bash "$GITHUB_WORKSPACE/.github/scripts/inject-os4-stubs.sh"
+
       - name: Clamp pid_max to 32768 (MKP mitigation, keep nomask RW)
         run: |
           set -e
@@ -364,6 +379,29 @@ jobs:
           grep -q "^CONFIG_TRUSTY_RESCUE=y$" /tmp/built-config || { echo "::error::TRUSTY_RESCUE not built in (Kconfig hook dropped?)"; exit 1; }
           grep -q 'kvm-arm.mode=nvhe' /tmp/built-config || { echo "::error::CONFIG_CMDLINE missing kvm-arm.mode=nvhe (cmdline bake failed)"; exit 1; }
           if grep -q 'kvm-arm.mode=protected' /tmp/built-config; then echo "::error::kvm-arm.mode=protected still in built config"; exit 1; fi
+          # OS4 symbol-gap fix: 13 stub tracehooks + LZ4_compress_default must be EXPORTED
+          # (__ksymtab_* entries). Gate here so a silently-dropped injection never reaches flashing.
+          VM=$(find ~/gki/bazel-bin -name vmlinux -path "*kernel_aarch64*" 2>/dev/null | head -n1)
+          if [ -n "$VM" ]; then
+            for SYM in __tracepoint_android_vh_remove_mapping __tracepoint_android_vh_remove_mapping_failed \
+                       __tracepoint_android_vh_filemap_get_folio_end __tracepoint_android_vh_put_super \
+                       __tracepoint_android_vh_fuse_request_end_ext __tracepoint_android_vh_fuse_request_fetch \
+                       __tracepoint_android_vh_mmap_lock_free __tracepoint_android_vh_mmap_lock_init \
+                       __tracepoint_android_vh_percpu_rwsem_init __tracepoint_android_vh_rcu_boost_end \
+                       __tracepoint_android_vh_rcu_boost_start __tracepoint_android_vh_sync_rcu_wait_end \
+                       __tracepoint_android_vh_sync_rcu_wait_start LZ4_compress_default; do
+              readelf -sW "$VM" | grep -q "__ksymtab_$SYM" || { echo "::error::export missing for $SYM (OS4 stub injection failed)"; exit 1; }
+            done
+            echo "OS4 symbol-gap fix verified: 13 tracehooks + LZ4_compress_default exported"
+            # The probes are now actually CALLED (call sites patched), so the KCFI
+            # type hash embedded in each __traceiter_* must equal the one the stock
+            # modules carry at -4(%probe). A mismatch is a #brk panic on first hit,
+            # so gate here: the hash set is pinned by the stock kernel disassembly.
+            python3 "$GITHUB_WORKSPACE/.github/scripts/verify-os4-kcfi.py" "$VM" /tmp/built-config \
+              || { echo "::error::OS4 stub prototypes do not match stock KCFI hashes - refusing to flash"; exit 1; }
+          else
+            echo "::warning::vmlinux not found under bazel-bin; skip OS4 export verification (check Image on host)"
+          fi
           if [ "${{ matrix.variant }}" = "ksu" ]; then
             grep -q "^CONFIG_KSU=y$" /tmp/built-config || { echo "::error::KSU missing in ksu build"; exit 1; }
             grep -q "^CONFIG_KPM=y$" /tmp/built-config || { echo "::error::KPM missing in ksu build"; exit 1; }
