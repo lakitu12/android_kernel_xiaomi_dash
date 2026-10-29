@@ -416,22 +416,43 @@ jobs:
             [ -s "$VM" ] || { echo "::error::reconstructed ELF is empty"; exit 1; }
             echo "reconstructed $VM ($(stat -c%s "$VM") bytes)"
           fi
-          for SYM in __tracepoint_android_vh_remove_mapping __tracepoint_android_vh_remove_mapping_failed \
-                     __tracepoint_android_vh_filemap_get_folio_end __tracepoint_android_vh_put_super \
-                     __tracepoint_android_vh_fuse_request_end_ext __tracepoint_android_vh_fuse_request_fetch \
-                     __tracepoint_android_vh_mmap_lock_free __tracepoint_android_vh_mmap_lock_init \
-                     __tracepoint_android_vh_percpu_rwsem_init __tracepoint_android_vh_rcu_boost_end \
-                     __tracepoint_android_vh_rcu_boost_start __tracepoint_android_vh_sync_rcu_wait_end \
-                     __tracepoint_android_vh_sync_rcu_wait_start LZ4_compress_default; do
+          # NO_LZ4_EXPORT=1 deliberately drops LZ4 (node_cache must fail to load),
+          # so it is required or forbidden depending on the switch.
+          REQUIRED="__tracepoint_android_vh_remove_mapping __tracepoint_android_vh_remove_mapping_failed \
+                    __tracepoint_android_vh_filemap_get_folio_end __tracepoint_android_vh_put_super \
+                    __tracepoint_android_vh_fuse_request_end_ext __tracepoint_android_vh_fuse_request_fetch \
+                    __tracepoint_android_vh_mmap_lock_free __tracepoint_android_vh_mmap_lock_init \
+                    __tracepoint_android_vh_percpu_rwsem_init __tracepoint_android_vh_rcu_boost_end \
+                    __tracepoint_android_vh_rcu_boost_start __tracepoint_android_vh_sync_rcu_wait_end \
+                    __tracepoint_android_vh_sync_rcu_wait_start"
+          if [ "${NO_LZ4_EXPORT}" = "1" ]; then
+            readelf -sW "$VM" | grep -q "__ksymtab_LZ4_compress_default" \
+              && { echo "::error::NO_LZ4_EXPORT=1 but LZ4_compress_default is still exported"; exit 1; }
+            echo "NO_LZ4_EXPORT=1: LZ4_compress_default correctly absent from ksymtab"
+          else
+            REQUIRED="$REQUIRED LZ4_compress_default"
+          fi
+          for SYM in $REQUIRED; do
             readelf -sW "$VM" | grep -q "__ksymtab_$SYM" || { echo "::error::export missing for $SYM (OS4 stub injection failed)"; exit 1; }
           done
+          if [ "${OS4_HOOKS}" = "off" ]; then
+            for SYM in $REQUIRED; do
+              readelf -sW "$VM" | grep -q "__ksymtab_$SYM" \
+                && { echo "::error::OS4_HOOKS=off but $SYM is exported (hook series not skipped?)"; exit 1; }
+            done
+            echo "OS4_HOOKS=off: no OS4 tracehook exports, as intended"
+          fi
           echo "OS4 symbol-gap fix verified: 13 tracehooks + LZ4_compress_default exported"
           # The probes are now actually CALLED (call sites patched), so the KCFI
           # type hash embedded in each __traceiter_* must equal the one the stock
           # modules carry at -4(%probe). A mismatch is a #brk panic on first hit,
           # so gate here: the hash set is pinned by the stock kernel disassembly.
-          python3 "$GITHUB_WORKSPACE/.github/scripts/verify-os4-kcfi.py" "$VM" /tmp/built-config \
-            || { echo "::error::OS4 stub prototypes do not match stock KCFI hashes - refusing to flash"; exit 1; }
+          if [ "${OS4_HOOKS}" = "off" ]; then
+            echo "OS4_HOOKS=off: skipping the KCFI hash gate (no stub traceiters in this build)"
+          else
+            python3 "$GITHUB_WORKSPACE/.github/scripts/verify-os4-kcfi.py" "$VM" /tmp/built-config \
+              || { echo "::error::OS4 stub prototypes do not match stock KCFI hashes - refusing to flash"; exit 1; }
+          fi
           if [ "${{ matrix.variant }}" = "ksu" ]; then
             grep -q "^CONFIG_KSU=y$" /tmp/built-config || { echo "::error::KSU missing in ksu build"; exit 1; }
             grep -q "^CONFIG_KPM=y$" /tmp/built-config || { echo "::error::KPM missing in ksu build"; exit 1; }
