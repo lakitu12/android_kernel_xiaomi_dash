@@ -4,10 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       hook_call_sites:
-        description: 'OS4 hook call sites: full (default) or none (definitions+exports only, for the on-device bisect)'
+        description: 'OS4 hook call sites: full (default) / none (definitions+exports only) / comma list of groups (0004,0005...)'
         default: full
+        type: string
+      os4_hooks:
+        description: 'OS4 vendor hooks: on (default) or off (control build - node_cache/os_cpu_qi fail to load as on stock)'
+        default: 'on'
         type: choice
-        options: [full, none]
+        options: ['on', 'off']
   push:
     branches: [main, master]
     paths:
@@ -29,6 +33,7 @@ jobs:
       # A pushed build is always the full series; the definitions-only variant
       # is an explicit workflow_dispatch (single-variable on-device bisect).
       HOOK_CALL_SITES: ${{ inputs.hook_call_sites || 'full' }}
+      OS4_HOOKS: ${{ inputs.os4_hooks || 'on' }}
 
     steps:
       - name: Checkout
@@ -523,7 +528,11 @@ jobs:
           # Definitions-only builds must never be mistaken for the full series
           # (2026-10-29: the full series bootlooped, so both get exercised).
           SUFFIX=""
-          if [ "${HOOK_CALL_SITES}" = "none" ]; then SUFFIX="-NOCALLSITES"; fi
+          if [ "${OS4_HOOKS}" = "off" ]; then
+            SUFFIX="-NOHOOKS"
+          elif [ "${HOOK_CALL_SITES}" != "full" ]; then
+            SUFFIX="-SITES$(echo "${HOOK_CALL_SITES}" | tr -d ',')"
+          fi
           if [ "${{ matrix.variant }}" = "ksu" ]; then
             IMG=/tmp/ak3-images/Image-ksu
             OUT="AnyKernel3-dash-6.6.118-android15-DroidSpaces-SUSFS-SukiSU-KPM${SUFFIX}.zip"

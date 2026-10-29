@@ -68,8 +68,14 @@ apply-patches.py --tree <kernel/common> --patches <dir> [--check]
 0010 rcu            rcu_boost_start/end, sync_rcu_wait_start/end
 ```
 
-CI 里用 `workflow_dispatch` 的 `hook_call_sites` 输入选择；非 `full` 的产物
-文件名带 `-NOCALLSITES` 后缀，避免和全量版混淆。`apply-tree-patches.sh` 的自检
+CI 里用 `workflow_dispatch` 的 `hook_call_sites` 输入选择；非 `full` 的产物文件名带
+`-SITES<组号>` 后缀，避免和全量版混淆。
+
+另有 `os4_hooks` 输入（`on`/`off`）：`off` 时整个 os4-vendor-hooks series 都不打，
+树回到 stock 状态——`node_cache.ko`/`os_cpu_qi.ko` 会像原厂内核一样**加载失败**。
+这是隔离「模块现在能加载了」与「我们改的其它东西」的控制组（2026-10-29：
+`none` 版无任何调用点仍 bootloop，说明触发点不是调用点，而是模块能加载之后的行为）。
+产物带 `-NOHOOKS` 后缀。`apply-tree-patches.sh` 的自检
 会按选择断言：选中的组必须**有**调用点，未选中的组必须**没有**。
 
 ## 各 series 的前置知识

@@ -35,6 +35,12 @@ fail() { echo "::error::patch self-check failed: $*"; exit 1; }
 #   0009 percpu-rwsem   percpu_rwsem_init
 #   0010 rcu            rcu_boost_start/end, sync_rcu_wait_start/end
 ALL_SITES="0004 0005 0006 0007 0008 0009 0010"
+# OS4_HOOKS=off drops the hook series entirely (0001-0003 included), i.e. a tree
+# where node_cache.ko/os_cpu_qi.ko still fail to load exactly as on stock. That
+# is the control that isolates "modules now load" from everything else:
+# 2026-10-29 the definitions-only build (no call sites at all) still bootlooped,
+# so the trigger is not our call sites.
+OS4_HOOKS=${OS4_HOOKS:-on}
 HOOK_CALL_SITES=${HOOK_CALL_SITES:-full}
 case "$HOOK_CALL_SITES" in
   full) SITES=$ALL_SITES ;;
@@ -51,7 +57,11 @@ SKIP_ARGS=()
 for g in $ALL_SITES; do
   case " $SITES " in *" $g "*) ;; *) SKIP_ARGS+=(--skip "os4-vendor-hooks/$g") ;; esac
 done
-echo "HOOK_CALL_SITES=$HOOK_CALL_SITES (groups: ${SITES:-none})"
+if [ "$OS4_HOOKS" = off ]; then
+  SITES=""
+  SKIP_ARGS+=(--skip 'os4-vendor-hooks/000[1-3]')
+fi
+echo "OS4_HOOKS=$OS4_HOOKS HOOK_CALL_SITES=$HOOK_CALL_SITES (groups: ${SITES:-none})"
 python3 "$HERE/apply-patches.py" --tree "$TREE" --patches "$ROOT/patches" "${SKIP_ARGS[@]+"${SKIP_ARGS[@]}"}"
 
 # ------------------------------------------------ trusty-rescue 自检
@@ -79,6 +89,17 @@ android_vh_sync_rcu_wait_end
 android_vh_sync_rcu_wait_start"
 
 H="$TREE/include/trace/hooks/dash_os4_stub.h"
+if [ "$OS4_HOOKS" = off ]; then
+  # control build: the hook series must be entirely absent, exactly like stock
+  [ -f "$H" ] && fail "OS4_HOOKS=off but the hook header is present"
+  grep -q 'dash_os4_stub' "$TREE/drivers/android/vendor_hooks.c" && fail "OS4_HOOKS=off but vendor_hooks.c still includes the stub header"
+  [ -f "$TREE/android/abi_gki_aarch64_dash_os4" ] && fail "OS4_HOOKS=off but the KMI list is present"
+  echo "patches applied + verified (OS4 hooks disabled on purpose):"
+  echo "  trusty-rescue      driver, Kconfig/Makefile hook, nvhe cmdline, CONFIG_TRUSTY_RESCUE=y"
+  echo "  pid-max-clamp      pid space clamped to 32768"
+  echo "  os4-vendor-hooks   OFF - node_cache/os_cpu_qi will fail to load as on stock"
+  exit 0
+fi
 [ -f "$H" ] || fail "hook header missing"
 grep -q "TRACE_SYSTEM dash_os4_stub" "$H" || fail "hook header TRACE_SYSTEM wrong"
 grep -q 'include <trace/hooks/dash_os4_stub.h>' "$TREE/drivers/android/vendor_hooks.c" \
