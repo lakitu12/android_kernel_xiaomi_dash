@@ -71,6 +71,11 @@ apply-patches.py --tree <kernel/common> --patches <dir> [--check]
 CI 里用 `workflow_dispatch` 的 `hook_call_sites` 输入选择；非 `full` 的产物文件名带
 `-SITES<组号>` 后缀，避免和全量版混淆。
 
+另有 `no_lz4_export` 输入（`0`/`1`）：`1` 时把 `LZ4_compress_default` 从 KMI 白名单里删掉。
+`node_cache.ko` 需要 4 个 hook **加** LZ4，所以它会退化成「加载失败」（等同原厂行为）；
+`os_cpu_qi.ko` 只需要 9 个 QoS hook，仍然能加载。用它在不改源码的前提下把两个模块分开。
+产物带 `-NOLZ4` 后缀。
+
 另有 `os4_hooks` 输入（`on`/`off`）：`off` 时整个 os4-vendor-hooks series 都不打，
 树回到 stock 状态——`node_cache.ko`/`os_cpu_qi.ko` 会像原厂内核一样**加载失败**。
 这是隔离「模块现在能加载了」与「我们改的其它东西」的控制组（2026-10-29：

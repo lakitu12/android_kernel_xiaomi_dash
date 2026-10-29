@@ -12,6 +12,11 @@ on:
         default: 'on'
         type: choice
         options: ['on', 'off']
+      no_lz4_export:
+        description: 'Drop LZ4_compress_default from the KMI list: node_cache stops loading, os_cpu_qi keeps loading'
+        default: '0'
+        type: choice
+        options: ['0', '1']
   push:
     branches: [main, master]
     paths:
@@ -34,6 +39,7 @@ jobs:
       # is an explicit workflow_dispatch (single-variable on-device bisect).
       HOOK_CALL_SITES: ${{ inputs.hook_call_sites || 'full' }}
       OS4_HOOKS: ${{ inputs.os4_hooks || 'on' }}
+      NO_LZ4_EXPORT: ${{ inputs.no_lz4_export || '0' }}
 
     steps:
       - name: Checkout
@@ -530,6 +536,8 @@ jobs:
           SUFFIX=""
           if [ "${OS4_HOOKS}" = "off" ]; then
             SUFFIX="-NOHOOKS"
+          elif [ "${NO_LZ4_EXPORT}" = "1" ]; then
+            SUFFIX="-NOLZ4"
           elif [ "${HOOK_CALL_SITES}" != "full" ]; then
             SUFFIX="-SITES$(echo "${HOOK_CALL_SITES}" | tr -d ',')"
           fi

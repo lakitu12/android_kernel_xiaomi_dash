@@ -61,8 +61,21 @@ if [ "$OS4_HOOKS" = off ]; then
   SITES=""
   SKIP_ARGS+=(--skip 'os4-vendor-hooks/000[1-3]')
 fi
+# NO_LZ4_EXPORT=1 keeps all 13 hooks but drops the LZ4_compress_default line from
+# the KMI whitelist. node_cache.ko needs 4 hooks AND LZ4 -> it stops loading;
+# os_cpu_qi.ko needs only the 9 QoS hooks -> it keeps loading. That separates the
+# two modules without another source patch.
+NO_LZ4_EXPORT=${NO_LZ4_EXPORT:-0}
 echo "OS4_HOOKS=$OS4_HOOKS HOOK_CALL_SITES=$HOOK_CALL_SITES (groups: ${SITES:-none})"
 python3 "$HERE/apply-patches.py" --tree "$TREE" --patches "$ROOT/patches" "${SKIP_ARGS[@]+"${SKIP_ARGS[@]}"}"
+
+if [ "$NO_LZ4_EXPORT" = 1 ]; then
+  ABI="$TREE/android/abi_gki_aarch64_dash_os4"
+  [ -f "$ABI" ] || { echo "::error::NO_LZ4_EXPORT=1 but $ABI is missing"; exit 1; }
+  sed -i '/^[[:space:]]*LZ4_compress_default$/d' "$ABI"
+  grep -q 'LZ4_compress_default' "$ABI" && { echo "::error::failed to drop LZ4 from the KMI list"; exit 1; }
+  echo "NO_LZ4_EXPORT=1: dropped LZ4_compress_default -> node_cache will fail to load"
+fi
 
 # ------------------------------------------------ trusty-rescue 自检
 [ -f "$TREE/drivers/trusty_rescue/trusty_rescue.c" ] || fail "trusty_rescue.c missing"
@@ -134,7 +147,12 @@ for h in $HOOKS; do
 done
 [ -f "$TREE/android/abi_gki_aarch64_dash_os4" ] || fail "KMI symbol list missing"
 grep -q 'abi_gki_aarch64_dash_os4' "$TREE/BUILD.bazel" || fail "KMI list not wired into BUILD.bazel"
-grep -q '^  LZ4_compress_default$' "$TREE/android/abi_gki_aarch64_dash_os4" || fail "LZ4 not whitelisted"
+if [ "$NO_LZ4_EXPORT" = 1 ]; then
+  grep -q 'LZ4_compress_default' "$TREE/android/abi_gki_aarch64_dash_os4" \
+    && fail "NO_LZ4_EXPORT=1 but LZ4 is still whitelisted"
+else
+  grep -q '^  LZ4_compress_default$' "$TREE/android/abi_gki_aarch64_dash_os4" || fail "LZ4 not whitelisted"
+fi
 
 echo "patches applied + verified:"
 echo "  trusty-rescue      driver, Kconfig/Makefile hook, nvhe cmdline, CONFIG_TRUSTY_RESCUE=y"
