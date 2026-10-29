@@ -229,6 +229,22 @@ jobs:
           KSU_PIN=b59170724cdc
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s "$KSU_PIN"
           ls -l common/drivers/kernelsu
+          # This build runs clang with -Werror,-Wimplicit-fallthrough, and clang
+          # does not accept the legacy "/* fall through */" comment in C mode -
+          # it wants the statement (the kernel's fallthrough macro, in-tree since
+          # 5.15). builtin@b5917072 still ships one such comment in
+          # policy/allowlist.c:migrate_profile(); that alone fails the whole build
+          # (run 40816847987, after ~12 min). Rewrite it in the KSU tree only;
+          # drop this once upstream switches to fallthrough;.
+          KSU_DIR=common/drivers/kernelsu
+          if grep -rq '/\* fall through \*/' "$KSU_DIR"; then
+            echo "rewriting legacy fallthrough annotations:"
+            grep -rl '/\* fall through \*/' "$KSU_DIR" | while read -r f; do
+              echo "  $f"
+              sed -i 's|/\* fall through \*/|fallthrough;|g' "$f"
+            done
+          fi
+          ! grep -rq '/\* fall through \*/' "$KSU_DIR" || { echo "::error::fallthrough annotation still present"; exit 1; }
           # Fail-fast static guard against dangling feature handlers (catch upstream
           # breakage in seconds instead of burning ~12 min of build):
           KU=common/drivers/kernelsu/feature/kernel_umount.c
