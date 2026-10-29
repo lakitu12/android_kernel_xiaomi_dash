@@ -38,6 +38,12 @@ apply-patches.py --tree <kernel/common> --patches <dir> [--check]
 
 补丁按路径排序应用，series 之间相互独立。
 
+**注意应用时机**：本目录在 CI 里位于「版本串修正」之后，而该步骤会往
+`arch/arm64/configs/gki_defconfig` 末尾追加 `# CONFIG_LOCALVERSION_AUTO is not set`。
+所以补丁的 hunk 不要锚在文件末尾（0003 最初就是 end-of-file hunk，第一次 CI
+必然失败），锚到改动点附近的稳定上下文（如 `CONFIG_CMDLINE_EXTEND=y` 后面）。
+依此类推：任何「前置步骤会改的文件」都要按**前置步骤之后**的状态来生成补丁。
+
 ## 各 series 的前置知识
 
 ### trusty-rescue
