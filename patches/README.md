@@ -1,0 +1,74 @@
+# patches/ — 我们对 GKI 源树的全部改动
+
+dash 自编内核（`kernel/common` @ `android15-6.6-2026-01_r1`，6.6.118）所需的所有
+内核侧改动都集中在这里，以**标准 unified diff** 维护，由
+[`../.github/scripts/apply-patches.py`](../.github/scripts/apply-patches.py) 统一应用。
+
+```
+patches/
+├── trusty-rescue/        gz 被抹除（nvhe/pKVM）启动时的相机链自救驱动
+├── os4-vendor-hooks/     dash OS4 厂商模块需要的 13 个 MTK vendor hook
+└── pid-max-clamp/        pid 空间钳到 32768（MKP 0x8000 类 bug 的规避）
+```
+
+CI 里只有一步 `Apply maintenance patches`，它调用
+[`apply-tree-patches.sh`](../.github/scripts/apply-tree-patches.sh)：先应用本目录
+全部补丁，再逐条自检（每个 hook 的 `DECLARE_HOOK` / 导出 / 调用点、rescue 的
+Kconfig/Makefile 挂钩与 nvhe cmdline、pid_max 的两处钳制）。少一条就 fail。
+
+## 为什么用补丁而不是脚本
+
+* 整个 delta 一屏可读、可 review、可 diff、可回滚；
+* 应用器只做 `git apply` / `patch`，不做字符串手术；
+* 上游漂移时补丁会**干净地失败**，而不是「悄悄插到错误位置还编译通过」。
+
+代价是上下文变了要重新生成补丁——这是有意的取舍（宁失败，不静默错）。
+
+## 应用器行为
+
+```
+apply-patches.py --tree <kernel/common> --patches <dir> [--check]
+```
+
+1. `git apply --check`（精确）
+2. `git apply --check --ignore-whitespace`（行尾空白差异）
+3. `patch -p1 --dry-run -F2`（轻微偏移）
+4. 反向可应用 → 视为「已打过」，跳过（重跑幂等）
+5. 否则失败并打印 `git apply -v` 的排查命令
+
+补丁按路径排序应用，series 之间相互独立。
+
+## 各 series 的前置知识
+
+### trusty-rescue
+gz/Trusty 固件被抹除后（给内核 EL2 跑 pKVM），`gz_trusty_mod` 的 SMC 握手失败，
+`/trusty/trusty-virtio` 不会生成，secure-cmdq mailbox → imgsys/IMGSCP 相机链永久
+defer，`camerahalserver` 崩溃循环。这个驱动做三腿指纹自检（driver 已注册 / device
+缺失 / 父设备未绑定），持续成立才动作，健康 gz 启动下是 no-op。
+配套把 `CONFIG_CMDLINE` 的 `kvm-arm.mode=protected` 改成 `nvhe`。
+
+### os4-vendor-hooks
+13 个 `android_vh_*` tracepoint 在 AOSP GKI 6.6 里不存在，但 dash OS4 的
+`node_cache.ko`（4 个）与 `os_cpu_qi.ko`（9 个）要 probe 它们。
+**TP_PROTO 不能改**：`CONFIG_CFI_CLANG=y` 下 `__traceiter_*` 会核对探针类型哈希，
+与原厂不一致会在 hook 首次触发时 `brk #0x8228`。现有原型是用
+`clang -fsanitize=kcfi` 复算、与 stock 内核立即数逐位对齐得到的；调用点位置则由
+stock Image 反汇编里每一条 `bl __traceiter_*` 定位。构建后
+[`verify-os4-kcfi.py`](../.github/scripts/verify-os4-kcfi.py) 再验一次哈希。
+细节见 `~/下载/dash-os4/os4-hooks-callsite-map.md`。
+
+### pid-max-clamp
+`PID_MAX_LIMIT` 与 `pid_max_max` 都钳到 32768，使 0x8000 掩码类 bug 不可达
+（dash stock 的 id 空间约 8% 会踩到）。改两处是因为头文件宏可被重新定义，
+`kernel/pid.c` 的 `pid_max_max` 是硬钳制。
+
+## 重新生成
+
+基线固定为 tag `android15-6.6-2026-01_r1`。改完补丁内容后：
+
+```bash
+# 在干净基线上应用本目录全部补丁，得到 after 树
+python3 .github/scripts/apply-patches.py --tree ~/gki/common --patches patches
+# 生成某个文件的 diff
+git -C ~/gki diff --no-color -- mm/vmscan.c > patches/os4-vendor-hooks/0004-....patch
+```

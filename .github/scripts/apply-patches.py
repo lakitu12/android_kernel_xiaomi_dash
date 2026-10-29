@@ -2,7 +2,7 @@
 """Apply the dash-OS4 patch series to a kernel/common tree.
 
 Design note (user's call, 2026-10-29): the OS4 bring-up delta is kept as
-**standard unified diffs** under `.github/patches/<series>/` instead of scripted
+**standard unified diffs** under `patches/<series>/` instead of scripted
 string surgery, so the whole delta is reviewable in one place and the applier is
 a dumb, uniform loop.
 
@@ -101,9 +101,19 @@ def main():
     if not os.path.isdir(tree):
         sys.exit("::error::%s is not a directory" % tree)
 
-    patches = sorted(p for p in os.listdir(args.patches) if p.endswith(".patch"))
+    # A series directory may contain *.patch directly or one level of
+    # sub-directories (patches/<series>/*.patch), which is how this repo keeps
+    # independent series (trusty-rescue, os4-vendor-hooks) side by side.
+    root = os.path.abspath(args.patches)
+    patches = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames.sort()
+        for f in sorted(filenames):
+            if f.endswith(".patch"):
+                patches.append(os.path.relpath(os.path.join(dirpath, f), root))
+    patches.sort()
     if not patches:
-        sys.exit("::error::no *.patch under %s" % args.patches)
+        sys.exit("::error::no *.patch under %s" % root)
 
     use_git = is_git_tree(tree)
     print("apply-patches: %d patch(es) -> %s  (%s)"
@@ -111,7 +121,7 @@ def main():
 
     failures = []
     for name in patches:
-        path = os.path.join(args.patches, name)
+        path = os.path.join(root, name)
         mode, detail = probe(tree, path, args.strip, use_git)
         if mode == "already":
             print("  = %-52s already applied" % name)
@@ -132,7 +142,7 @@ def main():
             print("::error::patch %s does not apply" % name)
             print("  hunk context no longer matches this tree. Inspect with:")
             print("    git -C %s apply --check -p%d -v %s"
-                  % (tree, args.strip, os.path.join(args.patches, name)))
+                  % (tree, args.strip, os.path.join(root, name)))
             print("  then either rebase the patch onto the new base or re-derive")
             print("  the prototype/call-site from the stock kernel (see")
             print("  ~/下载/dash-os4/os4-hooks-callsite-map.md).")

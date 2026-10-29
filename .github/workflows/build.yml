@@ -7,7 +7,7 @@ on:
     paths:
       - '.github/workflows/build.yml'
       - '.github/scripts/**'
-      - 'rescue/**'
+      - 'patches/**'
 
 jobs:
   build:
@@ -107,50 +107,18 @@ jobs:
 
           git diff --stat || true
 
-      # OS4(6.6.118) 的厂商模块 import 了 13 个 AOSP 6.6 源里不存在的 MTK vendor-hook
-      # tracepoint（node_cache 4 + os_cpu_qi 9），另 LZ4_compress_default 被
-      # TRIM_UNUSED_KSYMS 裁掉导出。实测：638 个 .ko / 3652 个必需符号，自编内核缺 14，
-      # stock 缺 0（~/下载/dash-os4/kernel-symbol-gap.md）。
-      # 本步骤补「定义 + 导出 + KMI 白名单 + call site」：TP_PROTO 由 stock 内核/模块的
-      # KCFI 类型哈希逐位反推，call site 由 stock 反汇编逐点定位；构建后再由
-      # verify-os4-kcfi.py 断言哈希一致，否则 hook 一触发就 #brk。
-      - name: Inject OS4 vendor hooks (14-symbol gap + call sites)
+      # 本仓库对 GKI 源树的全部改动都在 patches/ 下（标准 unified diff）：
+      #   patches/trusty-rescue/     gz 抹除后（nvhe/pKVM）相机链自救驱动 + nvhe cmdline
+      #   patches/os4-vendor-hooks/  dash OS4 厂商模块所需的 13 个 MTK vendor hook
+      #   patches/pid-max-clamp/     pid 空间钳到 32768（MKP 0x8000 类 bug 的规避）
+      # 应用器只做 git apply/patch，任何一处上下文对不上就中止构建；打完后自检每条改动。
+      - name: Apply maintenance patches (trusty-rescue + OS4 vendor hooks)
         run: |
           set -e
           cd ~/gki
           if [ -d common ]; then KDIR=common; elif [ -d kernel/common ]; then KDIR=kernel/common; else KDIR=$(find . -name "Kconfig" -path "*/arch/arm64/*" | head -n1 | xargs dirname | xargs dirname | xargs dirname); fi
           echo "KDIR=$KDIR"
-          KDIR="$HOME/gki/$KDIR" bash "$GITHUB_WORKSPACE/.github/scripts/inject-os4-stubs.sh"
-
-      - name: Clamp pid_max to 32768 (MKP mitigation, keep nomask RW)
-        run: |
-          set -e
-          cd ~/gki
-          if [ -d common ]; then KDIR=common; elif [ -d kernel/common ]; then KDIR=kernel/common; else KDIR=$(find . -name "Kconfig" -path "*/arch/arm64/*" | head -n1 | xargs dirname | xargs dirname | xargs dirname); fi
-          echo "KDIR=$KDIR"
-          # 1) header: PID_MAX_LIMIT -> 32768 (multiline macro, must replace whole block)
-          F=$(grep -rl "define PID_MAX_LIMIT" "$KDIR" --include="*.h" | head -n1)
-          if [ -n "$F" ]; then
-            echo "patching $F"
-            echo "before:"; sed -n '34,36p' "$F" | cat -A
-            perl -0777 -i -pe 's/#define PID_MAX_LIMIT.*PID_MAX_DEFAULT\)\)/#define PID_MAX_LIMIT 32768/s' "$F"
-            echo "after:"; grep -n "PID_MAX_LIMIT" "$F"
-            sed -n '/PID_MAX_LIMIT/,+2p' "$F" | head -n 5
-            # also show surrounding bytes
-            grep -c "32768" "$F" && echo "header patched ok" || echo "header patch FAILED"
-          else
-            echo "::warning::PID_MAX_LIMIT not found"
-          fi
-          # 2) pid.c: pid_max_max -> 32768 (hard clamp, survives header re-define)
-          if grep -q "pid_max_max" "$KDIR/kernel/pid.c"; then
-            sed -i 's/int pid_max_max.*=.*/int pid_max_max = 32768;/' "$KDIR/kernel/pid.c"
-            grep -n "pid_max_max" "$KDIR/kernel/pid.c" | head
-          fi
-          echo "pid_max clamp done (nomask can stay RW, MKP 0x8000 never hit)"
-          echo "=== sysctl pid_max table ==="
-          grep -rn "pid_max" "$KDIR" --include="*.c" -A2 -B2 | head -n 60 || true
-          echo "=== threads.h final ==="
-          cat "$F" | grep -A2 -B2 "PID_MAX_LIMIT" | head -n 10
+          bash "$GITHUB_WORKSPACE/.github/scripts/apply-tree-patches.sh" "$HOME/gki/$KDIR"
 
       - name: Patch gki_defconfig for DroidSpaces
         run: |
@@ -235,12 +203,8 @@ jobs:
           echo "=== gki_defconfig tail ==="
           tail -n 40 "$DEFCONFIG"
 
-      # trusty-rescue driver + kvm-arm.mode=nvhe CONFIG_CMDLINE bake (field-verified
-      # recipe from trusty-pop.kpm, 2026-10-03: 3 cameras + video OK under gz-erased
-      # nVHE; self-guarded no-op when gz intact). Applies to BOTH variants.
-      - name: Inject trusty-rescue driver + nvhe cmdline
-        run: bash "$GITHUB_WORKSPACE/.github/scripts/inject-rescue.sh"
-
+      # trusty-rescue (driver + kvm-arm.mode=nvhe cmdline) is applied by the
+      # "Apply maintenance patches" step above, for BOTH variants.
       - name: Setup SukiSU Ultra builtin + KPM + SUSFS configs
         if: matrix.variant == 'ksu'
         run: |
