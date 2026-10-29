@@ -20,7 +20,39 @@ ROOT=$(cd "$HERE/../.." && pwd)
 
 fail() { echo "::error::patch self-check failed: $*"; exit 1; }
 
-python3 "$HERE/apply-patches.py" --tree "$TREE" --patches "$ROOT/patches"
+# Single-variable on-device bisect switch (see patches/README.md):
+#   HOOK_CALL_SITES=full                  (default) definitions+exports+all call sites
+#   HOOK_CALL_SITES=none                  definitions+exports only
+#   HOOK_CALL_SITES=0004,0005,...         only the listed call-site groups
+# 2026-10-29: the full series bootlooped on device even though symbols and KCFI
+# hashes were perfect, so the call sites must go in one group at a time.
+#   group -> patch -> hooks
+#   0004 mm/vmscan      remove_mapping, remove_mapping_failed
+#   0005 mm/filemap     filemap_get_folio_end
+#   0006 fs/super       put_super
+#   0007 fs/fuse        fuse_request_end_ext, fuse_request_fetch
+#   0008 kernel/fork    mmap_lock_init, mmap_lock_free
+#   0009 percpu-rwsem   percpu_rwsem_init
+#   0010 rcu            rcu_boost_start/end, sync_rcu_wait_start/end
+ALL_SITES="0004 0005 0006 0007 0008 0009 0010"
+HOOK_CALL_SITES=${HOOK_CALL_SITES:-full}
+case "$HOOK_CALL_SITES" in
+  full) SITES=$ALL_SITES ;;
+  none) SITES="" ;;
+  *)    SITES=$(echo "$HOOK_CALL_SITES" | tr ',' ' ') ;;
+esac
+for g in $SITES; do
+  case " $ALL_SITES " in
+    *" $g "*) ;;
+    *) echo "::error::unknown call-site group '$g' (known: $ALL_SITES)"; exit 1 ;;
+  esac
+done
+SKIP_ARGS=()
+for g in $ALL_SITES; do
+  case " $SITES " in *" $g "*) ;; *) SKIP_ARGS+=(--skip "os4-vendor-hooks/$g") ;; esac
+done
+echo "HOOK_CALL_SITES=$HOOK_CALL_SITES (groups: ${SITES:-none})"
+python3 "$HERE/apply-patches.py" --tree "$TREE" --patches "$ROOT/patches" "${SKIP_ARGS[@]+"${SKIP_ARGS[@]}"}"
 
 # ------------------------------------------------ trusty-rescue 自检
 [ -f "$TREE/drivers/trusty_rescue/trusty_rescue.c" ] || fail "trusty_rescue.c missing"
@@ -51,11 +83,33 @@ H="$TREE/include/trace/hooks/dash_os4_stub.h"
 grep -q "TRACE_SYSTEM dash_os4_stub" "$H" || fail "hook header TRACE_SYSTEM wrong"
 grep -q 'include <trace/hooks/dash_os4_stub.h>' "$TREE/drivers/android/vendor_hooks.c" \
   || fail "vendor_hooks.c does not include the stub header"
+# hook -> call-site group (must match the patch groups above)
+hook_group() {
+  case "$1" in
+    android_vh_remove_mapping|android_vh_remove_mapping_failed) echo 0004 ;;
+    android_vh_filemap_get_folio_end)                          echo 0005 ;;
+    android_vh_put_super)                                      echo 0006 ;;
+    android_vh_fuse_request_end_ext|android_vh_fuse_request_fetch) echo 0007 ;;
+    android_vh_mmap_lock_init|android_vh_mmap_lock_free)       echo 0008 ;;
+    android_vh_percpu_rwsem_init)                              echo 0009 ;;
+    android_vh_rcu_boost_start|android_vh_rcu_boost_end|android_vh_sync_rcu_wait_start|android_vh_sync_rcu_wait_end) echo 0010 ;;
+  esac
+}
+
 for h in $HOOKS; do
   grep -q "DECLARE_HOOK($h," "$H" || fail "DECLARE_HOOK($h) missing"
   grep -q "EXPORT_TRACEPOINT_SYMBOL_GPL($h);" "$TREE/drivers/android/vendor_hooks.c" \
     || fail "export of $h missing"
-  grep -qr "trace_${h}(" "$TREE/mm" "$TREE/fs" "$TREE/kernel" || fail "call site for $h missing"
+  g=$(hook_group "$h")
+  case " $SITES " in
+    *" $g "*)
+      grep -qr "trace_${h}(" "$TREE/mm" "$TREE/fs" "$TREE/kernel" \
+        || fail "call site for $h missing (group $g selected)" ;;
+    *)
+      if grep -qr "trace_${h}(" "$TREE/mm" "$TREE/fs" "$TREE/kernel"; then
+        fail "call site for $h present although group $g is not selected"
+      fi ;;
+  esac
 done
 [ -f "$TREE/android/abi_gki_aarch64_dash_os4" ] || fail "KMI symbol list missing"
 grep -q 'abi_gki_aarch64_dash_os4' "$TREE/BUILD.bazel" || fail "KMI list not wired into BUILD.bazel"
@@ -63,5 +117,5 @@ grep -q '^  LZ4_compress_default$' "$TREE/android/abi_gki_aarch64_dash_os4" || f
 
 echo "patches applied + verified:"
 echo "  trusty-rescue      driver, Kconfig/Makefile hook, nvhe cmdline, CONFIG_TRUSTY_RESCUE=y"
-echo "  os4-vendor-hooks   13 tracehooks defined/exported/whitelisted, call sites in place"
+echo "  os4-vendor-hooks   13 tracehooks defined/exported/whitelisted, call sites: $HOOK_CALL_SITES"
 echo "  (build-time gate: verify-os4-kcfi.py compares each __traceiter_* hash with stock)"

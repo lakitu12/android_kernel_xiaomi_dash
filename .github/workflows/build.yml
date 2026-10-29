@@ -2,6 +2,12 @@ name: Build dash GKI 6.6.118-android15-8 - DroidSpaces + SukiSU Ultra (KPM + SUS
 
 on:
   workflow_dispatch:
+    inputs:
+      hook_call_sites:
+        description: 'OS4 hook call sites: full (default) or none (definitions+exports only, for the on-device bisect)'
+        default: full
+        type: choice
+        options: [full, none]
   push:
     branches: [main, master]
     paths:
@@ -19,6 +25,10 @@ jobs:
         variant: [ksu, bypass]
     runs-on: ubuntu-22.04
     timeout-minutes: 120
+    env:
+      # A pushed build is always the full series; the definitions-only variant
+      # is an explicit workflow_dispatch (single-variable on-device bisect).
+      HOOK_CALL_SITES: ${{ inputs.hook_call_sites || 'full' }}
 
     steps:
       - name: Checkout
@@ -510,14 +520,18 @@ jobs:
 
           ui_print " Done. Kernel swapped; init_boot and vendor_boot untouched."
           AKSH
+          # Definitions-only builds must never be mistaken for the full series
+          # (2026-10-29: the full series bootlooped, so both get exercised).
+          SUFFIX=""
+          if [ "${HOOK_CALL_SITES}" = "none" ]; then SUFFIX="-NOCALLSITES"; fi
           if [ "${{ matrix.variant }}" = "ksu" ]; then
             IMG=/tmp/ak3-images/Image-ksu
-            OUT="AnyKernel3-dash-6.6.118-android15-DroidSpaces-SUSFS-SukiSU-KPM.zip"
-            RAW="Image-6.6.118-android15-8-droidspaces-lakitu-KSU-KPM"
+            OUT="AnyKernel3-dash-6.6.118-android15-DroidSpaces-SUSFS-SukiSU-KPM${SUFFIX}.zip"
+            RAW="Image-6.6.118-android15-8-droidspaces-lakitu-KSU-KPM${SUFFIX}"
           else
             IMG=/tmp/ak3-images/Image-bypass
-            OUT="AnyKernel3-dash-6.6.118-android15-DroidSpaces-BYPASS-noKSU.zip"
-            RAW="Image-6.6.118-android15-8-droidspaces-lakitu-BYPASS-noKSU"
+            OUT="AnyKernel3-dash-6.6.118-android15-DroidSpaces-BYPASS-noKSU${SUFFIX}.zip"
+            RAW="Image-6.6.118-android15-8-droidspaces-lakitu-BYPASS-noKSU${SUFFIX}"
           fi
           rm -rf /tmp/AnyKernel3
           cp -r /tmp/AnyKernel3-template /tmp/AnyKernel3

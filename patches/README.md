@@ -44,6 +44,34 @@ apply-patches.py --tree <kernel/common> --patches <dir> [--check]
 必然失败），锚到改动点附近的稳定上下文（如 `CONFIG_CMDLINE_EXTEND=y` 后面）。
 依此类推：任何「前置步骤会改的文件」都要按**前置步骤之后**的状态来生成补丁。
 
+## 上机单变量开关（HOOK_CALL_SITES）
+
+2026-10-29 教训：全量 call site 的内核在真机上 **bootloop**，而当时 missing=0、
+13/13 KCFI 哈希全对、payload 也一致——**离线门禁证明不了调用点位置/锁上下文在真机安全**。
+所以 call site 要一组一组上机验证，开关在 `apply-tree-patches.sh`：
+
+| 值 | 含义 |
+|---|---|
+| `full`（默认，push 构建走这个） | 13 个 hook 定义+导出+全部调用点 |
+| `none` | 只有定义+导出，没有任何调用点（先确认这种能进系统） |
+| `0004` / `0004,0005` … | 只上指定分组的调用点，其余跳过 |
+
+分组对应关系（补丁号 → 文件 → hook）：
+
+```
+0004 mm/vmscan      remove_mapping, remove_mapping_failed
+0005 mm/filemap     filemap_get_folio_end
+0006 fs/super       put_super
+0007 fs/fuse        fuse_request_end_ext, fuse_request_fetch
+0008 kernel/fork    mmap_lock_init, mmap_lock_free
+0009 percpu-rwsem   percpu_rwsem_init
+0010 rcu            rcu_boost_start/end, sync_rcu_wait_start/end
+```
+
+CI 里用 `workflow_dispatch` 的 `hook_call_sites` 输入选择；非 `full` 的产物
+文件名带 `-NOCALLSITES` 后缀，避免和全量版混淆。`apply-tree-patches.sh` 的自检
+会按选择断言：选中的组必须**有**调用点，未选中的组必须**没有**。
+
 ## 各 series 的前置知识
 
 ### trusty-rescue

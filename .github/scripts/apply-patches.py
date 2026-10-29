@@ -17,6 +17,10 @@ intentional — a failed apply aborts the build. The applier therefore:
   5. otherwise fail loudly, printing the offending patch and the commands to
      inspect/regenerate it.
 
+Patches whose relative path matches --skip <regex> are not touched at all; the
+OS4 hook call sites use this to build a "definitions only" kernel for the
+single-variable on-device bisect (see HOOK_CALL_SITES in the workflow).
+
 Usage:
   apply-patches.py --tree <kernel/common> --patches <dir> [--check]
                    [--strip 1] [-v]
@@ -24,6 +28,7 @@ Usage:
 
 import argparse
 import os
+import re
 import subprocess
 import sys
 
@@ -94,6 +99,10 @@ def main():
     ap.add_argument("--patches", required=True, help="directory with *.patch")
     ap.add_argument("--strip", type=int, default=1)
     ap.add_argument("--check", action="store_true", help="dry-run only")
+    ap.add_argument("--skip", action="append", default=[],
+                    metavar="REGEX",
+                    help="skip patches whose relative path matches REGEX "
+                         "(repeatable)")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -112,6 +121,14 @@ def main():
             if f.endswith(".patch"):
                 patches.append(os.path.relpath(os.path.join(dirpath, f), root))
     patches.sort()
+    if args.skip:
+        kept, skipped = [], []
+        for name in patches:
+            (skipped if any(re.search(rx, name) for rx in args.skip)
+             else kept).append(name)
+        for name in skipped:
+            print("  - %-52s skipped by --skip" % name)
+        patches = kept
     if not patches:
         sys.exit("::error::no *.patch under %s" % root)
 
