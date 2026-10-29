@@ -2,6 +2,13 @@
 """patch-kcrctab.py — 改写 Image 里 __kcrctab(_gpl) 的 CRC，用于对齐厂商模块的
 modversions 期望值。
 
+状态（2026-10-29）：**CI 已不再使用这个脚本**。真正的原因已经查清并修正——
+stock 内核把 `android_vh_mmap_lock_init/_free` 的 EXPORT 放在只声明 tracepoint 的
+TU 里，genksyms 因此没把 `__used/__section` 属性算进 CRC；见
+patches/os4-vendor-hooks/0002 里的 dash_os4_decl_exports.c。本脚本保留为
+诊断/兜底工具：遇到新的厂商模块 CRC 不一致时，可先全量 diff kcrctab 定位，再用
+它临时钉值验证「就是这一个 CRC 的问题」。
+
 背景（dash OS4，2026-10-29 实测）：
   自编内核补的 13 个 MTK vendor hook 中，`android_vh_mmap_lock_init/_free` 两个
   hook 的 `__tracepoint_*` 符号 CRC 与 stock 内核不一致（其余 11 个、以及全部
