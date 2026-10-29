@@ -1,6 +1,6 @@
 diff --git a/include/trace/hooks/dash_os4_stub.h b/include/trace/hooks/dash_os4_stub.h
 new file mode 100644
-index 0000000..611e22d
+index 0000000..6f6c333
 --- /dev/null
 +++ b/include/trace/hooks/dash_os4_stub.h
 @@ -0,0 +1,124 @@
@@ -24,14 +24,21 @@ index 0000000..611e22d
 + *   rcu_boost_start / _end            0x922a38d6
 + *   sync_rcu_wait_start / _end        0x389e96a6
 + *
-+ * The trailing #undefs keep TRACE_SYSTEM/TRACE_INCLUDE_PATH from leaking into
-+ * the including translation unit (files like mm/filemap.c define
-+ * CREATE_TRACE_POINTS for their own trace/events headers later on).
++ * TRACE_INCLUDE_PATH is defined only in the CREATE_TRACE_POINTS pass, which is
++ * the stock trace/hooks hook-header idiom (see hooks/mm.h): in ordinary translation
++ * units <trace/define_trace.h> is a no-op, so nothing can leak into the file's
++ * own trace/events headers (mm/filemap.c, kernel/fork.c include their events
++ * header first and #undef CREATE_TRACE_POINTS afterwards); during the defining
++ * pass define_trace.h undefines TRACE_INCLUDE_PATH again via
++ * UNDEF_TRACE_INCLUDE_PATH.
 + */
 +#undef TRACE_SYSTEM
 +#define TRACE_SYSTEM dash_os4_stub
-+#undef TRACE_INCLUDE_PATH
++
++#ifdef CREATE_TRACE_POINTS
 +#define TRACE_INCLUDE_PATH trace/hooks
++#define UNDEF_TRACE_INCLUDE_PATH
++#endif
 +#if !defined(_TRACE_HOOK_DASH_OS4_STUB_H) || defined(TRACE_HEADER_MULTI_READ)
 +#define _TRACE_HOOK_DASH_OS4_STUB_H
 +#include <trace/hooks/vendor_hooks.h>
@@ -118,13 +125,6 @@ index 0000000..611e22d
 +		struct task_struct *task);
 +
 +#endif /* _TRACE_HOOK_DASH_OS4_STUB_H */
++
 +/* This part must be outside protection */
 +#include <trace/define_trace.h>
-+/* Do not leak the trace-system name into the rest of the translation unit:
-+ * callers such as mm/filemap.c define CREATE_TRACE_POINTS for their own
-+ * trace/events headers further down. (Skip this in the CREATE_TRACE_POINTS
-+ * pass itself, where define_trace.h re-reads this header mid-flight.) */
-+#ifndef CREATE_TRACE_POINTS
-+#undef TRACE_SYSTEM
-+#undef TRACE_INCLUDE_PATH
-+#endif
