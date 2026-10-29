@@ -371,27 +371,46 @@ jobs:
           if grep -q 'kvm-arm.mode=protected' /tmp/built-config; then echo "::error::kvm-arm.mode=protected still in built config"; exit 1; fi
           # OS4 symbol-gap fix: 13 stub tracehooks + LZ4_compress_default must be EXPORTED
           # (__ksymtab_* entries). Gate here so a silently-dropped injection never reaches flashing.
+          # NOTE: this gate must never skip. bazel-bin does not always hold a vmlinux
+          # (run 40819039897 warned and skipped the whole check), so fall back to
+          # reconstructing an ELF from the Image itself via kallsyms - the same
+          # path local acceptance (verify-built-image.sh) uses.
           VM=$(find ~/gki/bazel-bin -name vmlinux -path "*kernel_aarch64*" 2>/dev/null | head -n1)
-          if [ -n "$VM" ]; then
-            for SYM in __tracepoint_android_vh_remove_mapping __tracepoint_android_vh_remove_mapping_failed \
-                       __tracepoint_android_vh_filemap_get_folio_end __tracepoint_android_vh_put_super \
-                       __tracepoint_android_vh_fuse_request_end_ext __tracepoint_android_vh_fuse_request_fetch \
-                       __tracepoint_android_vh_mmap_lock_free __tracepoint_android_vh_mmap_lock_init \
-                       __tracepoint_android_vh_percpu_rwsem_init __tracepoint_android_vh_rcu_boost_end \
-                       __tracepoint_android_vh_rcu_boost_start __tracepoint_android_vh_sync_rcu_wait_end \
-                       __tracepoint_android_vh_sync_rcu_wait_start LZ4_compress_default; do
-              readelf -sW "$VM" | grep -q "__ksymtab_$SYM" || { echo "::error::export missing for $SYM (OS4 stub injection failed)"; exit 1; }
-            done
-            echo "OS4 symbol-gap fix verified: 13 tracehooks + LZ4_compress_default exported"
-            # The probes are now actually CALLED (call sites patched), so the KCFI
-            # type hash embedded in each __traceiter_* must equal the one the stock
-            # modules carry at -4(%probe). A mismatch is a #brk panic on first hit,
-            # so gate here: the hash set is pinned by the stock kernel disassembly.
-            python3 "$GITHUB_WORKSPACE/.github/scripts/verify-os4-kcfi.py" "$VM" /tmp/built-config \
-              || { echo "::error::OS4 stub prototypes do not match stock KCFI hashes - refusing to flash"; exit 1; }
-          else
-            echo "::warning::vmlinux not found under bazel-bin; skip OS4 export verification (check Image on host)"
+          if [ -z "$VM" ]; then
+            echo "vmlinux not in bazel-bin - reconstructing an ELF from the Image via kallsyms"
+            VM=/tmp/Image-vmlinux.elf
+            # venv first: runner python3 may be PEP-668 "externally managed"
+            if ! python3 -m venv /tmp/vte >/dev/null 2>&1; then
+              echo "::warning::python3 -m venv unavailable, installing into the system python"
+              python3 -m pip install --quiet --disable-pip-version-check --break-system-packages vmlinux-to-elf \
+                || { echo "::error::cannot install vmlinux-to-elf - OS4 export/KCFI verification would be skipped"; exit 1; }
+              VTE=vmlinux-to-elf
+            else
+              /tmp/vte/bin/pip install --quiet --disable-pip-version-check vmlinux-to-elf \
+                || { echo "::error::cannot install vmlinux-to-elf - OS4 export/KCFI verification would be skipped"; exit 1; }
+              VTE=/tmp/vte/bin/vmlinux-to-elf
+            fi
+            "$VTE" "$IMG" "$VM" >/dev/null 2>&1 \
+              || { echo "::error::vmlinux-to-elf failed on $IMG - cannot verify OS4 exports/KCFI"; exit 1; }
+            [ -s "$VM" ] || { echo "::error::reconstructed ELF is empty"; exit 1; }
+            echo "reconstructed $VM ($(stat -c%s "$VM") bytes)"
           fi
+          for SYM in __tracepoint_android_vh_remove_mapping __tracepoint_android_vh_remove_mapping_failed \
+                     __tracepoint_android_vh_filemap_get_folio_end __tracepoint_android_vh_put_super \
+                     __tracepoint_android_vh_fuse_request_end_ext __tracepoint_android_vh_fuse_request_fetch \
+                     __tracepoint_android_vh_mmap_lock_free __tracepoint_android_vh_mmap_lock_init \
+                     __tracepoint_android_vh_percpu_rwsem_init __tracepoint_android_vh_rcu_boost_end \
+                     __tracepoint_android_vh_rcu_boost_start __tracepoint_android_vh_sync_rcu_wait_end \
+                     __tracepoint_android_vh_sync_rcu_wait_start LZ4_compress_default; do
+            readelf -sW "$VM" | grep -q "__ksymtab_$SYM" || { echo "::error::export missing for $SYM (OS4 stub injection failed)"; exit 1; }
+          done
+          echo "OS4 symbol-gap fix verified: 13 tracehooks + LZ4_compress_default exported"
+          # The probes are now actually CALLED (call sites patched), so the KCFI
+          # type hash embedded in each __traceiter_* must equal the one the stock
+          # modules carry at -4(%probe). A mismatch is a #brk panic on first hit,
+          # so gate here: the hash set is pinned by the stock kernel disassembly.
+          python3 "$GITHUB_WORKSPACE/.github/scripts/verify-os4-kcfi.py" "$VM" /tmp/built-config \
+            || { echo "::error::OS4 stub prototypes do not match stock KCFI hashes - refusing to flash"; exit 1; }
           if [ "${{ matrix.variant }}" = "ksu" ]; then
             grep -q "^CONFIG_KSU=y$" /tmp/built-config || { echo "::error::KSU missing in ksu build"; exit 1; }
             grep -q "^CONFIG_KPM=y$" /tmp/built-config || { echo "::error::KPM missing in ksu build"; exit 1; }
