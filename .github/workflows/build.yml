@@ -141,6 +141,20 @@ jobs:
           echo "KDIR=$KDIR"
           bash "$GITHUB_WORKSPACE/.github/scripts/apply-tree-patches.sh" "$HOME/gki/$KDIR"
 
+      # 诊断用黑匣子（仅诊断镜像需要，main 不合并）：内核侧每秒把最新 512KB
+      # kmsg 写进 oops 分区的两个 1MB 槽，完全不依赖 init/mtdoops/console。
+      # 由 cmdline token bootdiag=flash 激活。
+      - name: DIAG inject boot_diag recorder (1s cadence, oops partition)
+        run: |
+          set -e
+          cd ~/gki
+          if [ -d common ]; then KDIR=common; elif [ -d kernel/common ]; then KDIR=kernel/common; else KDIR=$(find . -name "Kconfig" -path "*/arch/arm64/*" | head -n1 | xargs dirname | xargs dirname | xargs dirname); fi
+          T=$HOME/gki/$KDIR
+          cp "$GITHUB_WORKSPACE/.github/scripts/boot_diag_recorder.c" "$T/drivers/misc/boot_diag.c"
+          grep -q 'boot_diag.o' "$T/drivers/misc/Makefile" || echo 'obj-y += boot_diag.o' >> "$T/drivers/misc/Makefile"
+          head -5 "$T/drivers/misc/boot_diag.c"
+          tail -2 "$T/drivers/misc/Makefile"
+
       - name: Patch gki_defconfig for DroidSpaces
         run: |
           set -e
