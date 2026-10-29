@@ -117,3 +117,34 @@ python3 .github/scripts/apply-patches.py --tree ~/gki/common --patches patches
 # 生成某个文件的 diff
 git -C ~/gki diff --no-color -- mm/vmscan.c > patches/os4-vendor-hooks/0004-....patch
 ```
+## modversions CRC 对齐（构建后处理，不是补丁）
+
+`os4-vendor-hooks` 的 13 个 hook 里，**只有** `android_vh_mmap_lock_init/_free`
+两个 `__tracepoint_*` 符号的 genksyms CRC 与 stock 内核不一致：其余 11 个 hook
+以及 13 个 `__traceiter_*` 的 CRC 与 stock 逐位相同（2026-10-29 实测：stock Image
+与自编 Image 的 8988 个公共导出符号里，只有这 2 个不同）。后果是 `os_cpu_qi.ko`
+被内核以
+
+```
+os_cpu_qi: disagrees about version of symbol __tracepoint_android_vh_mmap_lock_init
+os_cpu_qi: Unknown symbol __tracepoint_android_vh_mmap_lock_init (err -22)
+```
+
+拒载，连带 `os_cpu_qs` / `task_turbo` / `mi_game` / `cpq` / `mi_reclaim` 整条
+QoS 模块链起不来（实测 556 → 584 个模块）。
+
+CRC 只在模块加载时比较一次，不参与任何运行路径；而这两个 hook 的 KCFI 原型哈希
+已被 gate 逐位验证，所以构建后把两个 `__kcrctab_gpl` 条目钉回 stock 的
+`0x615d194b` / `0xa301bcc9` 是安全的。CI 在 KCFI 门禁之后自动执行
+[`patch-kcrctab.py`](../.github/scripts/patch-kcrctab.py)（用 vmlinux-to-elf
+还原的 ELF 定位表项，写回 Image 并复读校验；`OS4_HOOKS=off` 的控制构建跳过）。
+手工处理单次构建产物：
+
+```bash
+python3 .github/scripts/patch-kcrctab.py <Image> <reconstructed.elf> \
+  __tracepoint_android_vh_mmap_lock_init=0x615d194b \
+  __tracepoint_android_vh_mmap_lock_free=0xa301bcc9
+```
+
+两个目标值来自：stock Image 的 `__kcrctab` 实测值 = `os_cpu_qi.ko` 的
+`__versions` 期望值。若以后厂商模块更新，以模块 `.ko` 的 `__versions` 为准。

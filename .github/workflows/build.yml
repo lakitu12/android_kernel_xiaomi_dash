@@ -456,6 +456,37 @@ jobs:
             python3 "$GITHUB_WORKSPACE/.github/scripts/verify-os4-kcfi.py" "$VM" /tmp/built-config \
               || { echo "::error::OS4 stub prototypes do not match stock KCFI hashes - refusing to flash"; exit 1; }
           fi
+
+          # --- modversions CRC alignment for the stock vendor modules --------
+          # os_cpu_qi.ko (and, transitively, os_cpu_qs / task_turbo / mi_game /
+          # cpq / mi_reclaim) is rejected with "disagrees about version of symbol
+          # __tracepoint_android_vh_mmap_lock_{init,free}" because our stub
+          # declarations, although prototype-identical (KCFI + __traceiter CRC
+          # gates above), still make genksyms emit a different CRC for those two
+          # __tracepoint_* objects than the OS4 stock kernel did. The CRC is only
+          # compared once at module load, so pin the two __kcrctab entries to the
+          # stock values (0x615d194b / 0xa301bcc9, read straight out of the stock
+          # Image's kcrctab and from os_cpu_qi.ko's __versions). Verified on-device
+          # 2026-10-29 18:2x: full QoS chain loads, unknown symbols 0, no CFI trap.
+          if [ "${OS4_HOOKS}" != "off" ]; then
+            CRC_ELF=/tmp/Image-crc-layout.elf
+            VTE_BIN="${VTE:-}"
+            if [ -z "$VTE_BIN" ] && [ -x /tmp/vte/bin/vmlinux-to-elf ]; then
+              VTE_BIN=/tmp/vte/bin/vmlinux-to-elf
+            fi
+            if [ -z "$VTE_BIN" ]; then
+              python3 -m venv /tmp/vte3 >/dev/null 2>&1 || true
+              /tmp/vte3/bin/pip install -q --disable-pip-version-check vmlinux-to-elf >/dev/null 2>&1 || true
+              if [ -x /tmp/vte3/bin/vmlinux-to-elf ]; then VTE_BIN=/tmp/vte3/bin/vmlinux-to-elf; fi
+            fi
+            [ -n "$VTE_BIN" ] || { echo "::error::vmlinux-to-elf unavailable - cannot align modversions CRCs"; exit 1; }
+            "$VTE_BIN" "$IMG" "$CRC_ELF" >/dev/null 2>&1 \
+              || { echo "::error::vmlinux-to-elf failed on $IMG (CRC alignment)"; exit 1; }
+            python3 "$GITHUB_WORKSPACE/.github/scripts/patch-kcrctab.py" "$IMG" "$CRC_ELF" \
+              __tracepoint_android_vh_mmap_lock_init=0x615d194b \
+              __tracepoint_android_vh_mmap_lock_free=0xa301bcc9 \
+              || { echo "::error::modversions CRC alignment failed - os_cpu_qi.ko would be rejected again"; exit 1; }
+          fi
           if [ "${{ matrix.variant }}" = "ksu" ]; then
             grep -q "^CONFIG_KSU=y$" /tmp/built-config || { echo "::error::KSU missing in ksu build"; exit 1; }
             grep -q "^CONFIG_KPM=y$" /tmp/built-config || { echo "::error::KPM missing in ksu build"; exit 1; }
