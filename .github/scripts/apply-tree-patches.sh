@@ -47,6 +47,8 @@ case "$HOOK_CALL_SITES" in
   none) SITES="" ;;
   *)    SITES=$(echo "$HOOK_CALL_SITES" | tr ',' ' ') ;;
 esac
+# OS4_HOOKS=off implies "no call sites either" - the header they include is gone.
+if [ "$OS4_HOOKS" = off ]; then SITES=""; fi
 for g in $SITES; do
   case " $ALL_SITES " in
     *" $g "*) ;;
@@ -58,7 +60,6 @@ for g in $ALL_SITES; do
   case " $SITES " in *" $g "*) ;; *) SKIP_ARGS+=(--skip "os4-vendor-hooks/$g") ;; esac
 done
 if [ "$OS4_HOOKS" = off ]; then
-  SITES=""
   SKIP_ARGS+=(--skip 'os4-vendor-hooks/000[1-3]')
 fi
 # NO_LZ4_EXPORT=1 keeps all 13 hooks but drops the LZ4_compress_default line from
