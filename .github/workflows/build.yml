@@ -597,6 +597,13 @@ jobs:
           chmod +x /tmp/AnyKernel3/tools/* /tmp/AnyKernel3/META-INF/com/google/android/update-binary
           ( cd /tmp/AnyKernel3 && zip -r9 -q "/tmp/artifacts/$OUT" . )
           cp -v "$IMG" "/tmp/artifacts/$RAW"
+          # 诊断用符号表：崩溃 PC 要靠它落成函数名（main 上可保留，代价 ~10MB）
+          SM=$(find ~/gki/bazel-bin -name System.map -path "*kernel_aarch64*" 2>/dev/null | head -n1)
+          if [ -n "$SM" ]; then
+            cp -v "$SM" "/tmp/artifacts/System.map-${{ matrix.variant }}"
+          else
+            echo "::warning::System.map not found in bazel-bin, crash PCs cannot be symbolized"
+          fi
           echo "=== verify $OUT ==="
           unzip -p "/tmp/artifacts/$OUT" anykernel.sh | grep -E "^BLOCK=boot" || { echo "::error::uppercase BLOCK missing"; exit 1; }
           unzip -p "/tmp/artifacts/$OUT" anykernel.sh | grep -E "split_boot|write_boot" || { echo "::error::anykernel.sh missing install calls"; exit 1; }

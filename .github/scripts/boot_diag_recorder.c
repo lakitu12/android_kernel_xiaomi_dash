@@ -35,7 +35,7 @@
 #define SLOT_BASE	(8u << 20)	/* keep clear of the 4MB AEE report @0 */
 #define SLOT_STRIDE	(4u << 20)	/* slot0 @8MB, slot1 @12MB (2MB mtd pages) */
 #define DIAG_CAP	(512u << 10)	/* newest 512KB of the ring */
-#define DIAG_ITERS	240		/* ~4 minutes of 1s cadence */
+#define DIAG_ITERS	360		/* 25 x 200ms then 335 x 1s (~5.7 min) */
 
 static char *diag_ring;		/* DIAG_CAP ring buffer, newest bytes */
 static char *diag_lin;		/* DIAG_CAP chronological copy to write out */
@@ -163,7 +163,7 @@ static int diag_kthread(void *unused)
 	size_t n;
 	int ret;
 
-	msleep(200);
+	msleep(150);
 	for (i = 0; i < DIAG_ITERS; i++) {
 		if (kthread_should_stop())
 			break;
@@ -172,7 +172,11 @@ static int diag_kthread(void *unused)
 		ret = diag_write_slot(i & 1, i + 1, n);
 		pr_info("bootdiag: slot %u seq %u wrote %zu bytes (ret %d)\n",
 			i & 1, i + 1, n, ret);
-		ssleep(1);
+		/* 前 5 秒 5Hz：崩溃点实测在 ~1.5s，慢采样会错过窗口 */
+		if (i < 24)
+			msleep(200);
+		else
+			ssleep(1);
 	}
 	for (;;)
 		ssleep(3600);
