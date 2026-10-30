@@ -111,7 +111,6 @@ jobs:
           # OBSERVED (run 33304453206) file content = "-android15-8-maybe-dirty"
           # (KMI tail comes from the same file) -> after patch:
           #   6.6.118-android15-8-droidspaces-lakitu
-          echo '# CONFIG_LOCALVERSION_AUTO is not set' >> "$KD/arch/arm64/configs/gki_defconfig"
           # Patch kleaf no-stamp version source: build/kleaf/impl/stamp.bzl emits
           # literal "-maybe-dirty" when --config=stamp is absent; replace with our
           # suffix (this file ALSO carries the -android15-8 KMI tail).
@@ -169,91 +168,9 @@ jobs:
           head -5 "$T/drivers/misc/boot_diag.c"
           tail -2 "$T/drivers/misc/Makefile"
 
-      - name: Patch gki_defconfig for DroidSpaces
-        run: |
-          set -e
-          DEFCONFIG=~/gki/common/arch/arm64/configs/gki_defconfig
-
-          # Helper: ensure CONFIG_FOO=y (replace is not set or append)
-          ensure_y() {
-            local cfg="$1"
-            local file="$DEFCONFIG"
-            if grep -q "# CONFIG_${cfg} is not set" "$file"; then
-              sed -i "s/# CONFIG_${cfg} is not set/CONFIG_${cfg}=y/" "$file"
-              echo " -> $cfg: replaced not set -> y"
-            elif grep -q "CONFIG_${cfg}=y" "$file"; then
-              echo " -> $cfg already y"
-            elif grep -q "CONFIG_${cfg}=" "$file"; then
-              sed -i "s/CONFIG_${cfg}=.*/CONFIG_${cfg}=y/" "$file"
-              echo " -> $cfg: flipped -> y"
-            else
-              echo "CONFIG_${cfg}=y" >> "$file"
-              echo " -> $cfg: appended y"
-            fi
-          }
-
-          # DroidSpaces GKI exclusive fragment (from Kernel-Configuration.md#GKI)
-          # dash stock ikconfig ground truth (2026-08-30, extract-ikconfig on stock Image):
-          #   SYSVIPC / POSIX_MQUEUE / IPC_NS / PID_NS / DEVTMPFS / USER_NS /
-          #   TMPFS_XATTR / TMPFS_POSIX_ACL / NETFILTER_XT_MATCH_ADDRTYPE / IP_SET
-          #   are all OFF in stock -> every one of these is a real kABI-relevant flip.
-          ensure_y SYSVIPC
-          ensure_y POSIX_MQUEUE
-          ensure_y IPC_NS
-          ensure_y PID_NS
-          ensure_y DEVTMPFS
-          ensure_y NETFILTER_XT_MATCH_ADDRTYPE
-          # Optional recommended
-          ensure_y USER_NS
-          ensure_y TMPFS_POSIX_ACL
-          ensure_y TMPFS_XATTR
-          ensure_y NETFILTER_XT_TARGET_REJECT
-          ensure_y NETFILTER_XT_TARGET_LOG
-          ensure_y NETFILTER_XT_MATCH_RECENT
-          ensure_y IP_SET
-          ensure_y IP_SET_HASH_IP
-          ensure_y IP_SET_HASH_NET
-          ensure_y NETFILTER_XT_SET
-
-          # KPROBES/KALLSYMS for KSU/SukiSU (harmless in bypass too).
-          # dash stock: KPROBES=y already; KALLSYMS=y + KALLSYMS_ALL=y already.
-          ensure_y KPROBES
-          ensure_y KALLSYMS
-          ensure_y KALLSYMS_ALL
-
-          # MODULE_SIG_PROTECT MUST be disabled for GKI 3.0 (android15-6.6).
-          # Stock=y works because Google's module-signing key is compiled into
-          # the stock trusted ring. A self-built kernel only trusts its own
-          # kleaf-internal key, so every Google-signed system_dlkm module that
-          # EXPORTS a protected symbol (rfkill, bluetooth, mii, ppp*, usbnet,
-          # virtio*, can*, ...) is refused with "exports protected symbol"
-          # (EACCES, silent at boot) -> cfg80211 "Unknown symbol rfkill_alloc"
-          # -> WiFi + BT dead. Observed & isolated on dash 2026-08-30 (8021q/
-          # gzvm load fine - their exports are unprotected; insmod rfkill/mii
-          # refused even in permissive). Stock's trust path cannot be replicated
-          # (no access to Google's signing cert chain); WildKernels' equivalent
-          # is stripping protected exports. Minimal fix: turn the gate off.
-          # No task_struct/ABI/CRC impact (module.c load-time policy only).
-          sed -i 's/^CONFIG_MODULE_SIG_PROTECT=y/# CONFIG_MODULE_SIG_PROTECT is not set/' "$DEFCONFIG"
-          grep -q "^# CONFIG_MODULE_SIG_PROTECT is not set" "$DEFCONFIG" || { echo "::error::failed to disable MODULE_SIG_PROTECT"; exit 1; }
-          echo "MODULE_SIG_PROTECT disabled (system_dlkm protected-symbol gate off)"
-
-          # LTO/CFI MUST match the stock kernel environment or vendor_dlkm modules
-          # fail to load -> bootloop (marble lesson, validated both ways).
-          # dash stock ikconfig ground truth: CONFIG_LTO_NONE=y + CONFIG_CFI_CLANG=y.
-          # => keep LTO_NONE as stock (do NOT enable THIN: a different LTO mode changes
-          #    codegen and CRCs vs vendor modules) and keep CFI as stock.
-          # Side effect: no LTO = no OOM risk on 7GB runners (marble needed LTO_THIN
-          # only because stock was LTO_FULL).
-          grep -E "CONFIG_LTO|CONFIG_CFI" "$DEFCONFIG" || true
-
-          # Bypass GKI savedefconfig check (fragment appended at end, not sorted)
-          sed -i 's/POST_DEFCONFIG_CMDS="check_defconfig"/POST_DEFCONFIG_CMDS="true"/' ~/gki/common/build.config.gki || true
-          echo "=== gki_defconfig tail ==="
-          tail -n 40 "$DEFCONFIG"
-
-      # trusty-rescue (driver + kvm-arm.mode=nvhe cmdline) is applied by the
-      # "Apply maintenance patches" step above, for BOTH variants.
+      # DroidSpaces 的 kABI padding（include/linux/sched.h）和所需 config
+      # （SYSVIPC/POSIX_MQUEUE/IPC_NS/PID_NS/DEVTMPFS/...）都烘在树里，CI 不再
+      # 改 defconfig；下面只处理 KSU/SUSFS/KernelPatch 这些外部注入。
       - name: Setup SukiSU Ultra builtin + KPM + SUSFS configs
         if: matrix.variant == 'ksu'
         run: |
@@ -429,16 +346,13 @@ jobs:
           # KMI strict check off for CI (kABI patches shift some CRCs by design).
           # build/build.sh does NOT exist on android15-6.6 manifests (legacy build
           # removed; kleaf/bazel is the only path) -> follow WildKernels' split:
-          # patch check_defconfig into common/BUILD.bazel, then tools/bazel build.
+          # defconfig 已经是树里的（含 DroidSpaces 配置），kleaf 只在 build 阶段
+          # 读它，不再有 CI 侧的 defconfig 改写步骤。
           if [ -f build/build.sh ]; then
             sed -i 's/KMI_SYMBOL_LIST_STRICT_MODE=1/KMI_SYMBOL_LIST_STRICT_MODE=0/' common/build.config.gki.aarch64 || true
             set -o pipefail
             KMI_SYMBOL_LIST_STRICT_MODE=0 BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j2 2>&1 | tee build.log
           else
-            # Disable the savedefconfig gate in kleaf (fragment appended, not sorted).
-            grep -q 'check_defconfig = "disabled"' common/BUILD.bazel || \
-              sed -i '/name = "kernel_aarch64",/a\    check_defconfig = "disabled",' common/BUILD.bazel
-            grep -B2 -A3 'check_defconfig' common/BUILD.bazel || true
             # NOTE: no --config=stamp -> Kleaf inserts a literal "-maybe-dirty"
             # placeholder into the version string; the KMI tail "-android15-8"
             # is still injected by the build-config chain (BRANCH/KMI_GENERATION

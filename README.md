@@ -48,10 +48,21 @@ vendor hook 就是这件事的表征）。仓内树保留 MTK 自己的 vendor h
 
 我方 delta 以**提交**形式烘在树里（不再有 `patches/` 目录，2026-10-30 按用户要求取消）：
 review/revert 就是 `git log 537ebbfb..` + `git revert`；CI 只做源码级自检
-（`.github/scripts/verify-tree.sh`）和二进制门禁（`__ksymtab_*` / KCFI 哈希），不再打补丁。
+（`.github/scripts/verify-tree.sh`）和二进制门禁（`__ksymtab_*` / KCFI 哈希），不再改
+内核树的任何文件（唯一剩下的构建期注入是 SukiSU / SUSFS / KernelPatch 这些外部组件）。
+
+烘进去的 delta 一共 5 个提交：
+
+| 提交 | 内容 |
+|---|---|
+| `2cefe8eac` | DroidSpaces kABI padding：`sysv_sem`/`sysv_shm` 挪进 `ANDROID_KABI_RESERVE(6..8)`，于是开 SYSVIPC 也不改 task_struct 布局（stock 模块照旧能加载） |
+| `4513908e6` | 13 个 OS4 vendor hook（含只声明 TU，保证 mmap_lock_* 的 CRC 与 stock 一致） |
+| `5a0528e72` | trusty-rescue 驱动 + `kvm-arm.mode=nvhe` |
+| `5846e03c7` | pid 空间钳到 32768 |
+| `944cfc0ba` | `gki_defconfig` 里直接写 SYSVIPC / POSIX_MQUEUE / IPC_NS / PID_NS / DEVTMPFS / USER_NS / TMPFS_* / netfilter / IP_SET / KPROBES / KALLSYMS，并把 `MODULE_SIG_PROTECT` 关掉（kleaf 下没有 savedefconfig 门禁，不需要额外开关） |
+
 代价是原来的三个上机单变量开关（`HOOK_CALL_SITES` / `OS4_HOOKS` / `NO_LZ4_EXPORT`）随之
-取消——要分变体现在只能开分支。SukiSU / SUSFS / KPM **仍不入库**，继续在 CI 里按钉住的
-commit 打补丁。
+取消——要分变体现在只能开分支。
 
 合并过程（18 个冲突的逐条取舍、本地怎么重做、怎么验证）见
 [docs/base-merge-6.6.118.md](docs/base-merge-6.6.118.md)。

@@ -65,6 +65,18 @@ done
 grep -q 'abi_gki_aarch64_dash_os4' "$TREE/BUILD.bazel" || fail "KMI whitelist not wired into BUILD.bazel"
 grep -q '^  LZ4_compress_default$' "$TREE/android/abi_gki_aarch64_dash_os4" || fail "LZ4_compress_default not whitelisted"
 
+# ------------------------------------------------ DroidSpaces: kABI padding + configs
+# SYSVIPC 会改 task_struct 布局，所以字段挪进了 ANDROID_KABI_RESERVE(6..8)，
+# 让 stock（无 SYSVIPC）与我们的布局逐字节一致。
+grep -q 'ANDROID_KABI_USE(6, struct sysv_sem sysvsem)' "$TREE/include/linux/sched.h" \
+  || fail "DroidSpaces SYSVIPC kABI padding missing from include/linux/sched.h"
+for sym in SYSVIPC POSIX_MQUEUE IPC_NS PID_NS DEVTMPFS USER_NS \
+           TMPFS_XATTR TMPFS_POSIX_ACL NETFILTER_XT_MATCH_ADDRTYPE IP_SET \
+           NETFILTER_XT_SET KPROBES KALLSYMS KALLSYMS_ALL; do
+  grep -q "^CONFIG_${sym}=y$" "$DEF" || fail "gki_defconfig lost CONFIG_${sym}=y"
+done
+grep -q '^# CONFIG_MODULE_SIG_PROTECT is not set$' "$DEF" \
+  || fail "MODULE_SIG_PROTECT must stay off (system_dlkm protected-symbol refusal)"
 # ------------------------------------------------ pid clamp
 grep -qE '^#define PID_MAX_LIMIT[[:space:]]+PID_MAX_DEFAULT' "$TREE/include/linux/threads.h" \
   || fail "PID_MAX_LIMIT is not clamped to PID_MAX_DEFAULT in include/linux/threads.h"
@@ -73,6 +85,7 @@ grep -q 'pid_max_max = PID_MAX_DEFAULT' "$TREE/kernel/pid.c" \
 
 echo "in-tree dash delta verified:"
 echo "  trusty-rescue      driver + Kconfig/Makefile hook + nvhe cmdline + CONFIG_TRUSTY_RESCUE=y"
+echo "  DroidSpaces        SYSVIPC kABI padding + SYSVIPC/IPC_NS/PID_NS/DEVTMPFS/... configs + MODULE_SIG_PROTECT off"
 echo "  os4-vendor-hooks   13 tracehooks declared/exported/called, KMI list wired (13 + LZ4)"
 echo "  pid-max-clamp      pid space clamped to 32768"
 echo "  (binary gates still to run after the build: CONFIG checks, __ksymtab_*, KCFI hashes)"
