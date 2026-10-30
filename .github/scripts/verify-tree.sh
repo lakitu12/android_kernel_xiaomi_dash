@@ -19,10 +19,17 @@ fail() { echo "::error::in-tree dash delta broken: $*"; exit 1; }
 [ -f "$TREE/drivers/trusty_rescue/trusty_rescue.c" ] || fail "drivers/trusty_rescue/trusty_rescue.c missing"
 grep -q 'trusty_rescue/Kconfig' "$TREE/drivers/Kconfig" || fail "drivers/Kconfig not hooked"
 grep -q 'trusty_rescue/' "$TREE/drivers/Makefile" || fail "drivers/Makefile not hooked"
+# 我们的配置全在单独的 fragment 里（gki_defconfig 必须保持上游原样）
 DEF="$TREE/arch/arm64/configs/gki_defconfig"
-grep -q 'CONFIG_TRUSTY_RESCUE=y' "$DEF" || fail "CONFIG_TRUSTY_RESCUE=y missing from gki_defconfig"
-grep -q 'kvm-arm.mode=nvhe' "$DEF" || fail "gki_defconfig cmdline is not kvm-arm.mode=nvhe"
-grep -q 'kvm-arm.mode=protected' "$DEF" && fail "gki_defconfig cmdline flipped back to kvm-arm.mode=protected"
+FRAG="$TREE/arch/arm64/configs/dash_gki.fragment"
+[ -f "$FRAG" ] || fail "arch/arm64/configs/dash_gki.fragment missing"
+grep -q 'dash_gki.fragment' "$TREE/BUILD.bazel" \
+  || fail "defconfig_fragments does not wire dash_gki.fragment into BUILD.bazel"
+grep -q 'CONFIG_TRUSTY_RESCUE=y' "$FRAG" || fail "CONFIG_TRUSTY_RESCUE=y missing from dash_gki.fragment"
+grep -q 'kvm-arm.mode=nvhe' "$FRAG" || fail "fragment cmdline is not kvm-arm.mode=nvhe"
+grep -q 'kvm-arm.mode=protected' "$FRAG" && fail "fragment cmdline flipped back to kvm-arm.mode=protected"
+grep -qE '^CONFIG_(SYSVIPC|TRUSTY_RESCUE)=y|^# CONFIG_MODULE_SIG_PROTECT' "$DEF" \
+  && fail "our config leaked back into gki_defconfig (keep it pristine, use the fragment)"
 
 # ------------------------------------------------ OS4 vendor hooks (13)
 HOOKS="android_vh_remove_mapping
@@ -73,9 +80,9 @@ grep -q 'ANDROID_KABI_USE(6, struct sysv_sem sysvsem)' "$TREE/include/linux/sche
 for sym in SYSVIPC POSIX_MQUEUE IPC_NS PID_NS DEVTMPFS USER_NS \
            TMPFS_XATTR TMPFS_POSIX_ACL NETFILTER_XT_MATCH_ADDRTYPE IP_SET \
            NETFILTER_XT_SET KPROBES KALLSYMS KALLSYMS_ALL; do
-  grep -q "^CONFIG_${sym}=y$" "$DEF" || fail "gki_defconfig lost CONFIG_${sym}=y"
+  grep -q "^CONFIG_${sym}=y$" "$FRAG" || fail "dash_gki.fragment lost CONFIG_${sym}=y"
 done
-grep -q '^# CONFIG_MODULE_SIG_PROTECT is not set$' "$DEF" \
+grep -q '^# CONFIG_MODULE_SIG_PROTECT is not set$' "$FRAG" \
   || fail "MODULE_SIG_PROTECT must stay off (system_dlkm protected-symbol refusal)"
 # ------------------------------------------------ pid clamp
 grep -qE '^#define PID_MAX_LIMIT[[:space:]]+PID_MAX_DEFAULT' "$TREE/include/linux/threads.h" \
@@ -85,7 +92,7 @@ grep -q 'pid_max_max = PID_MAX_DEFAULT' "$TREE/kernel/pid.c" \
 
 echo "in-tree dash delta verified:"
 echo "  trusty-rescue      driver + Kconfig/Makefile hook + nvhe cmdline + CONFIG_TRUSTY_RESCUE=y"
-echo "  DroidSpaces        SYSVIPC kABI padding + SYSVIPC/IPC_NS/PID_NS/DEVTMPFS/... configs + MODULE_SIG_PROTECT off"
+echo "  DroidSpaces        SYSVIPC kABI padding in sched.h + dash_gki.fragment (SYSVIPC/IPC_NS/PID_NS/DEVTMPFS/..., MODULE_SIG_PROTECT off), gki_defconfig untouched"
 echo "  os4-vendor-hooks   13 tracehooks declared/exported/called, KMI list wired (13 + LZ4)"
 echo "  pid-max-clamp      pid space clamped to 32768"
 echo "  (binary gates still to run after the build: CONFIG checks, __ksymtab_*, KCFI hashes)"

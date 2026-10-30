@@ -59,7 +59,7 @@ review/revert 就是 `git log 537ebbfb..` + `git revert`；CI 只做源码级自
 | `4513908e6` | 13 个 OS4 vendor hook（含只声明 TU，保证 mmap_lock_* 的 CRC 与 stock 一致） |
 | `5a0528e72` | trusty-rescue 驱动 + `kvm-arm.mode=nvhe` |
 | `5846e03c7` | pid 空间钳到 32768 |
-| `944cfc0ba` | `gki_defconfig` 里直接写 SYSVIPC / POSIX_MQUEUE / IPC_NS / PID_NS / DEVTMPFS / USER_NS / TMPFS_* / netfilter / IP_SET / KPROBES / KALLSYMS，并把 `MODULE_SIG_PROTECT` 关掉（kleaf 下没有 savedefconfig 门禁，不需要额外开关） |
+| `arch/arm64/configs/dash_gki.fragment` | 我们的全部配置增量（DroidSpaces 的 SYSVIPC/POSIX_MQUEUE/IPC_NS/PID_NS/DEVTMPFS/USER_NS/TMPFS_*、netfilter/IP_SET、KPROBES/KALLSYMS、`MODULE_SIG_PROTECT off`、trusty-rescue 的 `CONFIG_TRUSTY_RESCUE=y` + `kvm-arm.mode=nvhe`）。经 `BUILD.bazel` 的 `defconfig_fragments` 在 `make defconfig` 之后合并；**`gki_defconfig` 保持上游原样** |
 
 代价是原来的三个上机单变量开关（`HOOK_CALL_SITES` / `OS4_HOOKS` / `NO_LZ4_EXPORT`）随之
 取消——要分变体现在只能开分支。

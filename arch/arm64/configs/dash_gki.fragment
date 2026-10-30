@@ -1,0 +1,61 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# dash GKI config fragment.
+#
+# Everything the dash build needs on top of the stock GKI config lives here and
+# is merged after `make defconfig` through
+#   kernel_build(defconfig_fragments = ["arch/arm64/configs/dash_gki.fragment"])
+# in BUILD.bazel. gki_defconfig itself stays byte-identical to the
+# Xiaomi/ACK tree, so syncing with AOSP or Xiaomi never conflicts on it.
+#
+# Gate: .github/scripts/verify-tree.sh asserts this file is wired up and that
+# the settings really landed; the workflow's version gate asserts the *built*
+# .config instead. NOTE: do not write symbol names with values in comments -
+# kleaf's fragment check would treat the comment line as an expectation.
+
+# --- DroidSpaces (host containers: PID/IPC/UTS namespaces + SysV IPC) --------
+#
+# SYSVIPC only lands here because include/linux/sched.h carries the Droidspaces
+# kABI padding: sysv_sem/sysv_shm were moved into ANDROID_KABI_RESERVE(6..8), so
+# enabling it does not move any field that MTK's prebuilt vendor modules read.
+# POSIX_MQUEUE needs no such patch on 6.6 (mqueue adds no task_struct fields).
+CONFIG_SYSVIPC=y
+CONFIG_POSIX_MQUEUE=y
+CONFIG_IPC_NS=y
+CONFIG_PID_NS=y
+CONFIG_DEVTMPFS=y
+CONFIG_USER_NS=y
+CONFIG_TMPFS_XATTR=y
+CONFIG_TMPFS_POSIX_ACL=y
+CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
+CONFIG_NETFILTER_XT_TARGET_LOG=y
+CONFIG_NETFILTER_XT_MATCH_RECENT=y
+CONFIG_IP_SET=y
+CONFIG_IP_SET_HASH_IP=y
+CONFIG_IP_SET_HASH_NET=y
+CONFIG_NETFILTER_XT_SET=y
+
+# --- SukiSU Ultra / KPM ------------------------------------------------------
+CONFIG_KPROBES=y
+CONFIG_KALLSYMS=y
+CONFIG_KALLSYMS_ALL=y
+
+# --- MODULE_SIG_PROTECT off --------------------------------------------------
+#
+# The stock kernel trusts Google's module-signing ring for protected-symbol
+# exports; a self-built kernel only trusts its own key, so every Google-signed
+# system_dlkm module that EXPORTS a protected symbol (rfkill, mii, ppp*, usbnet,
+# virtio*, can*, ...) is refused with EACCES and silently drops:
+#   cfg80211 "Unknown symbol rfkill_alloc" -> WiFi/BT dead.
+# This is a load-time policy only - no task_struct/ABI/CRC impact.
+# CONFIG_MODULE_SIG_PROTECT is not set
+
+# --- trusty-rescue -----------------------------------------------------------
+#
+# gz/Trusty is erased on this device (nogz, to get EL2 and /dev/kvm), so
+# gz_trusty_mod's SMC handshake fails, /trusty/trusty-virtio never appears and
+# the secure-cmdq mailbox -> imgsys/IMGSCP camera chain defers forever.
+# The driver re-arms the chain only when the three-fingerprint signature holds
+# (no-op on a healthy gz boot); kvm-arm.mode=nvhe is what the nogz setup needs.
+CONFIG_TRUSTY_RESCUE=y
+CONFIG_CMDLINE="console=ttynull stack_depot_disable=on cgroup_disable=pressure kasan.stacktrace=off kvm-arm.mode=nvhe bootconfig ioremap_guard"

@@ -120,31 +120,9 @@ jobs:
           sed -i "s/echo '-maybe-dirty'/echo '-droidspaces-lakitu'/" "$STAMP_BZL"
           grep -n "droidspaces-lakitu\|maybe-dirty" "$STAMP_BZL" || true
 
-      - name: Apply DroidSpaces kABI patches (GKI 6.6 = below-6.12 set)
-        run: |
-          set -e
-          cd ~/gki
-          # Clone DroidSpaces-OSS for patches
-          git clone --depth=1 https://github.com/ravindu644/Droidspaces-OSS /tmp/Droidspaces-OSS
-          # Upstream dir name has capital ABI (kABI); keep lowercase literal here.
-          ls /tmp/Droidspaces-OSS/Documentation/resources/kernel-patches/GKI/below-kernel-6.12/
-
-          # Find kernel common dir (manifest puts kernel in ./common)
-          if [ -d common ]; then KDIR=common; elif [ -d kernel/common ]; then KDIR=kernel/common; else KDIR=$(find . -name "Kconfig" -path "*/arch/arm64/*" | head -n1 | xargs dirname | xargs dirname | xargs dirname); fi
-          echo "KDIR=$KDIR"
-
-          cd "$KDIR"
-          # 1) SYSVIPC kABI fix - 6.7/6.8 variant is the recommended one for 6.6
-          #    (task_struct padding via ANDROID_KABI_RESERVE; dash stock has
-          #    CONFIG_ANDROID_KABI_RESERVE=y confirmed in ikconfig)
-          echo "=== Apply 001 SYSVIPC kABI (6_7_8 variant) ==="
-          patch -p1 < /tmp/Droidspaces-OSS/Documentation/resources/kernel-patches/GKI/below-kernel-6.12/001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch
-          # NOTE: NO 002 POSIX_MQUEUE patch - that one is 5.10-and-below only.
-
-          git diff --stat || true
-
-      # 我方的内核 delta（13 个 OS4 vendor hook + trusty-rescue + pid 钳制）已经作为
-      # 提交烘进树里，构建时不再打补丁。这一步只做源码级门禁：任何一条改动丢了
+      # 我方的内核 delta（DroidSpaces kABI + 13 个 OS4 vendor hook + trusty-rescue
+      # + pid 钳制，配置在 arch/arm64/configs/dash_gki.fragment）已经作为提交烘进树里，
+      # 构建时不再打任何补丁。这一步只做源码级门禁：任何一条改动丢了
       # （错误合并、误 revert）立刻失败，而不是 20 分钟后编出一个静默功能不全的内核。
       - name: Verify the in-tree dash delta
         run: |
