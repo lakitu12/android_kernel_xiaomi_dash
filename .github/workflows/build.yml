@@ -21,6 +21,11 @@ on:
         description: 'KSU/SUSFS 单变量开关（逗号可组合）: default / no_kpm / no_hide_syms / no_susfs_feats / inert / nohooks'
         default: default
         type: string
+      kpm_patch:
+        description: 'KernelPatch 预补丁（KPM 真正可用）: on (default) / off — CONFIG_KPM 只是桥，没 KP 时 ksud kpm 一律 EOPNOTSUPP'
+        default: 'on'
+        type: choice
+        options: ['on', 'off']
   push:
     branches: [main, master]
     paths:
@@ -45,6 +50,13 @@ jobs:
       OS4_HOOKS: ${{ inputs.os4_hooks || 'on' }}
       NO_LZ4_EXPORT: ${{ inputs.no_lz4_export || '0' }}
       KSU_OPTS: ${{ inputs.ksu_opts || 'default' }}
+      KPM_PATCH: ${{ inputs.kpm_patch || 'on' }}
+      # KernelPatch 工具链 pin：kptools 从 KP 源码构建（host 工具）；
+      # kpimg 与管理器 APK 里 bundled 的那份逐字节相同（sha256 14fc6564…），
+      # 由 SukiSU 维护者维护在 SukiSU_patch 仓。branch HEAD 会漂，所以钉 commit。
+      KP_COMMIT: d4c88d6672687456b299e4b5153c24dc979d789b
+      KPIMG_COMMIT: eec45788c9a115e5498040298133336d6b6071dd
+      KPIMG_SHA256: 14fc6564fa092afe4a2293268cd061da64a20f61dc91396a404daf13d053f5ca
 
     steps:
       - name: Checkout
@@ -55,7 +67,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git make bc bison flex libssl-dev libelf-dev \
             python3 python-is-python3 cpio pahole libncurses-dev rsync \
-            curl zip unzip tar xz-utils gcc g++ gawk openssl
+            curl zip unzip tar xz-utils gcc g++ gawk openssl \
+            cmake zlib1g-dev
 
       - name: Install repo
         run: |
@@ -556,6 +569,41 @@ jobs:
             cp -v "$IMG" /tmp/ak3-images/Image-bypass
           fi
 
+      - name: KernelPatch 预补丁（KPM 使能，${{ matrix.variant }}）
+        if: matrix.variant == 'ksu' && env.KPM_PATCH == 'on'
+        run: |
+          set -e
+          # CONFIG_KPM=y 只编出「桥」：kernel/extension/kpm.c 把 KPM 能力位设成
+          #   sukisu_kpm_bridge(SUKISU_KPM_PROBE) == SUKISU_KPM_ABI_VERSION
+          # 而 bridge 拿魔法值去调 __arm64_sys_truncate（KernelPatch 复用 syscall 45），
+          # 没有 KP 就返回 -EOPNOTSUPP -> 管理器看到 caps=0 禁用 KPM，
+          # ksud kpm 一律 "os error 95"。2026-10-30 实测确认后改为在此打 KP 预补丁。
+          if echo ",${KSU_OPTS}," | grep -q ',no_kpm,'; then
+            echo "KSU_OPTS=no_kpm：没有 KPM 桥，跳过 KP 预补丁"
+            exit 0
+          fi
+          curl -fsSL --retry 3 -o /tmp/kpimg \
+            "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/${KPIMG_COMMIT}/kpm/kpimg"
+          ACT_SHA=$(sha256sum /tmp/kpimg | cut -d' ' -f1)
+          echo "kpimg sha256: $ACT_SHA"
+          [ "$ACT_SHA" = "$KPIMG_SHA256" ] || { echo "::error::kpimg 内容漂移（pin 的 commit 应字节稳定）"; exit 1; }
+          git clone -q --filter=blob:none https://github.com/bmax121/KernelPatch.git /tmp/kp
+          git -C /tmp/kp checkout -q "$KP_COMMIT"
+          cp /tmp/kp/kernel/include/preset.h /tmp/kp/tools/
+          ( cd /tmp/kp/tools && cmake -DCMAKE_BUILD_TYPE=Release . >/dev/null && make -j"$(nproc)" >/dev/null )
+          /tmp/kp/tools/kptools -v -k /tmp/kpimg | tee /tmp/kpimg.info
+          # superkey 每构建随机，且用 -S（只在镜像里存 hash，不存明文）；
+          # KPM 走 supercall syscall 通道，不需要这个 key。
+          SK=$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)
+          IMG=/tmp/ak3-images/Image-ksu
+          /tmp/kp/tools/kptools -p -i "$IMG" -k /tmp/kpimg -S "$SK" -o /tmp/Image-kp
+          /tmp/kp/tools/kptools -l -i /tmp/Image-kp | tee /tmp/Image-kp.info
+          grep -q 'patched=true' /tmp/Image-kp.info || { echo "::error::KP 预补丁没生效"; exit 1; }
+          grep -q "kernelpatch\|version=" /tmp/Image-kp.info || { echo "::error::KP 元信息缺失"; exit 1; }
+          ls -l "$IMG" /tmp/Image-kp
+          mv /tmp/Image-kp "$IMG"
+          echo "KP prepatch OK: $(stat -c%s "$IMG") bytes (raw), kpimg $(grep -m1 version= /tmp/Image-kp.info)"
+
       - name: Prepare AnyKernel3 (${{ matrix.variant }})
         run: |
           set -e
@@ -656,6 +704,11 @@ jobs:
             *,nohooks,*)        SUFFIX="${SUFFIX}-NOHOOKS";;
           esac
           if echo ",${KSU_OPTS}," | grep -q ',no_kpm,'; then SUFFIX="${SUFFIX}-NOKPM"; fi
+          # -KP = 该 Image 已打 KernelPatch 预补丁（KPM 真能用）；没打就别在名字里吹 KPM
+          if [ "${{ matrix.variant }}" = "ksu" ] && [ "${KPM_PATCH}" = "on" ] \
+             && ! echo ",${KSU_OPTS}," | grep -q ',no_kpm,'; then
+            SUFFIX="${SUFFIX}-KP"
+          fi
           if [ "${{ matrix.variant }}" = "ksu" ]; then
             IMG=/tmp/ak3-images/Image-ksu
             OUT="AnyKernel3-dash-6.6.118-android15-DroidSpaces-SUSFS-SukiSU-KPM${SUFFIX}.zip"
