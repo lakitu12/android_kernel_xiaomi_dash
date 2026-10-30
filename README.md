@@ -6,7 +6,7 @@ DroidSpaces（宿主容器）+ SukiSU Ultra（KPM + SUSFS）。仓库结构/方�
 [kernel_marble_droidspaces](https://github.com/lakitu12/kernel_marble_droidspaces)
 （marble 5.10.236 同配方已实机验证 7 轮 CI + 开机）。
 
-## 仓库结构（`dash-6.6.118` 分支，2026-10-30 起）
+## 仓库结构（`main`，2026-10-30 起；原 patch-era 分支备份为 `main-legacy`）
 
 内核**源码树就在仓库根目录**（`Makefile` / `arch/` / `drivers/` / `mm/` … 与
 `patches/`、`.github/` 并列），CI 不再 `repo sync kernel/common`：
