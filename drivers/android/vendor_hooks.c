@@ -84,6 +84,7 @@
 #include <trace/hooks/typec.h>
 #include <trace/events/android_vendor_lmk.h>
 #include <trace/hooks/swapfile.h>
+#include <trace/hooks/dash_os4_stub.h>
 
 /*
  * Export tracepoints that act as a bare tracehook (ie: have no trace event
@@ -705,3 +706,16 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_pcp_alloc_factor_adjust);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_fas_gpu_qos_update_tracer);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_loop_skip_queue_work);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_gup_longterm_locked);
+
+/* dash OS4 vendor hooks: exported so stock vendor modules can probe them */
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_remove_mapping);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_remove_mapping_failed);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_filemap_get_folio_end);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_put_super);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_fuse_request_end_ext);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_fuse_request_fetch);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_percpu_rwsem_init);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_rcu_boost_end);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_rcu_boost_start);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_sync_rcu_wait_end);
+EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_sync_rcu_wait_start);

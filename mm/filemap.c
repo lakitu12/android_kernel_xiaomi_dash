@@ -56,6 +56,7 @@
 
 #undef CREATE_TRACE_POINTS
 #include <trace/hooks/mm.h>
+#include <trace/hooks/dash_os4_stub.h>
 
 /*
  * FIXME: remove all knowledge of the buffer layer from the core VM
@@ -2057,6 +2058,9 @@ no_page:
 
 	if (!folio)
 		return ERR_PTR(-ENOENT);
+
+	trace_android_vh_filemap_get_folio_end(mapping, folio);
+
 	return folio;
 }
 EXPORT_SYMBOL(__filemap_get_folio);

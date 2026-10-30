@@ -39,6 +39,7 @@
 #include <linux/fs_context.h>
 #include <uapi/linux/mount.h>
 #include "internal.h"
+#include <trace/hooks/dash_os4_stub.h>
 
 static int thaw_super_locked(struct super_block *sb, enum freeze_holder who);
 
@@ -691,6 +692,8 @@ void generic_shutdown_super(struct super_block *sb)
 			destroy_workqueue(sb->s_dio_done_wq);
 			sb->s_dio_done_wq = NULL;
 		}
+
+		trace_android_vh_put_super(sb);
 
 		if (sop->put_super)
 			sop->put_super(sb);

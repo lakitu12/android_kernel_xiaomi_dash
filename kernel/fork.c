@@ -116,6 +116,7 @@
 
 #undef CREATE_TRACE_POINTS
 #include <trace/hooks/sched.h>
+#include <trace/hooks/dash_os4_stub.h>
 /*
  * Minimum number of threads to boot the kernel
  */
@@ -956,6 +957,7 @@ void __mmdrop(struct mm_struct *mm)
 	mm_destroy_cid(mm);
 	percpu_counter_destroy_many(mm->rss_stat, NR_MM_COUNTERS);
 
+	trace_android_vh_mmap_lock_free(&mm->mmap_lock);
 	free_mm(mm);
 }
 EXPORT_SYMBOL_GPL(__mmdrop);
@@ -1301,6 +1303,7 @@ static struct mm_struct *mm_init(struct mm_struct *mm, struct task_struct *p,
 	atomic_set(&mm->mm_count, 1);
 	seqcount_init(&mm->write_protect_seq);
 	mmap_init_lock(mm);
+	trace_android_vh_mmap_lock_init(&mm->mmap_lock);
 	INIT_LIST_HEAD(&mm->mmlist);
 #ifdef CONFIG_PER_VMA_LOCK
 	mm->mm_lock_seq = 0;

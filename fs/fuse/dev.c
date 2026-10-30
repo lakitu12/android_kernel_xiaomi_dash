@@ -24,6 +24,7 @@
 #include <linux/sched.h>
 
 #include <trace/hooks/fuse.h>
+#include <trace/hooks/dash_os4_stub.h>
 
 MODULE_ALIAS_MISCDEV(FUSE_MINOR);
 MODULE_ALIAS("devname:fuse");
@@ -335,6 +336,7 @@ void fuse_request_end(struct fuse_req *req)
 		/* Wake up waiter sleeping in request_wait_answer() */
 		wake_up(&req->waitq);
 		trace_android_vh_fuse_request_end(current);
+		trace_android_vh_fuse_request_end_ext(req, current);
 	}
 
 	if (test_bit(FR_ASYNC, &req->flags))
@@ -1283,6 +1285,8 @@ static ssize_t fuse_dev_do_read(struct fuse_dev *fud, struct file *file,
 	clear_bit(FR_PENDING, &req->flags);
 	list_del_init(&req->list);
 	spin_unlock(&fiq->lock);
+
+	trace_android_vh_fuse_request_fetch(req, current);
 
 	args = req->args;
 	reqsize = req->in.h.len;

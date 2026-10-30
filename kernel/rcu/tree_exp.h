@@ -1016,8 +1016,10 @@ void synchronize_rcu_expedited(void)
 
 	/* Wait for expedited grace period to complete. */
 	rnp = rcu_get_root();
+	trace_android_vh_sync_rcu_wait_start(current);
 	wait_event(rnp->exp_wq[rcu_seq_ctr(s) & 0x3],
 		   sync_exp_work_done(s));
+	trace_android_vh_sync_rcu_wait_end(current);
 	smp_mb(); /* Work actions happen before return. */
 
 	/* Let the next expedited grace period start. */
