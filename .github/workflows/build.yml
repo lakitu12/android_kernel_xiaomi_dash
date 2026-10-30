@@ -18,7 +18,7 @@ on:
         type: choice
         options: ['0', '1']
       ksu_opts:
-        description: 'KSU/SUSFS 单变量开关（逗号可组合）: default / no_kpm / no_hide_syms / no_susfs_feats'
+        description: 'KSU/SUSFS 单变量开关（逗号可组合）: default / no_kpm / no_hide_syms / no_susfs_feats / inert'
         default: default
         type: string
   push:
@@ -293,6 +293,29 @@ jobs:
             exit 1
           fi
           echo "kernel_umount.c handler refs OK"
+
+          # KSU_OPTS=inert：KSU 代码仍在镜像里（布局/体积不变），但 kernelsu_init 立刻返回，
+          # 不注册任何 hook/LSM/符号。用来区分「是 KSU 的逻辑」还是「KSU 在镜像里这件事」。
+          if echo ",${KSU_OPTS}," | grep -q ',inert,'; then
+            python3 - "$KSU_DIR/ksu_main.c" <<'PYEOF'
+          import re, sys
+          p = sys.argv[1]
+          s = open(p).read()
+          m = re.search(r'int __init kernelsu_init\(void\)\n\{\n', s)
+          if not m:
+              sys.exit('kernelsu_init signature not found')
+          ins = ('static bool ksu_inert_build = true;\n\n'
+                 'int __init kernelsu_init(void)\n{\n'
+                 '\tif (ksu_inert_build) {\n'
+                 '\t\tpr_info("kernelsu: INERT build, no hooks installed\\n");\n'
+                 '\t\treturn 0;\n'
+                 '\t}\n')
+          s = s[:m.start()] + ins + s[m.end():]
+          open(p, 'w').write(s)
+          print('inert patch applied')
+          PYEOF
+            grep -n -A4 'int __init kernelsu_init' "$KSU_DIR/ksu_main.c" | head -10
+          fi
 
           # SUSFS kernel-side files + GKI patch. Branch gki-android15-6.6 EXISTS
           # (verified: 50_add_susfs_in_gki-android15-6.6.patch present, HTTP 200).
@@ -611,6 +634,7 @@ jobs:
           case ",${KSU_OPTS}," in
             *,no_susfs_feats,*) SUFFIX="${SUFFIX}-NOSUSFSFEAT";;
             *,no_hide_syms,*)   SUFFIX="${SUFFIX}-NOHIDESYM";;
+            *,inert,*)          SUFFIX="${SUFFIX}-INERT";;
           esac
           if echo ",${KSU_OPTS}," | grep -q ',no_kpm,'; then SUFFIX="${SUFFIX}-NOKPM"; fi
           if [ "${{ matrix.variant }}" = "ksu" ]; then
