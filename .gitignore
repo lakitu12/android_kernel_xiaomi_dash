@@ -173,3 +173,8 @@ sphinx_*/
 # --- dash repo extras (not part of the upstream tree) ---
 __pycache__/
 *.pyc
+# The kernel's own ".*" rule ignores hidden dirs such as .github/ at any depth,
+# which would silently ignore new files added there. Re-include the repo dirs we
+# own that live under a dot-name.
+!.github/
+!.github/**
