@@ -22,7 +22,7 @@ KSU+KPM+SUSFS（ksu variant）、MODULE_SIG_PROTECT off、LTO_NONE+CFI 对齐 st
 
 ### 1.1 CONFIG_CMDLINE: kvm-arm.mode protected → nvhe
 - 位置：`arch/arm64/configs/gki_defconfig` 的 `CONFIG_CMDLINE="…"`，由
-  `patches/trusty-rescue/0003-arm64-gki-defconfig-nvhe-and-enable.patch`，
+  `arch/arm64/configs/gki_defconfig`（`kvm-arm.mode=nvhe` + `CONFIG_TRUSTY_RESCUE=y`，
   ikconfig 双向断言（必须见 nvhe、必须无 protected）。
 - 原理：`kvm-arm.mode=protected` 是编译进内核的内置 cmdline（DTB/ramdisk 里都没有），
   原厂时代只能对 boot 做字节手术；自研内核直接在源码改，零 AVB 风险。
@@ -31,8 +31,8 @@ KSU+KPM+SUSFS（ksu variant）、MODULE_SIG_PROTECT off、LTO_NONE+CFI 对齐 st
   （`KVM is not available. Ignoring kvm-arm.mode`），nvhe 字符串无害。
 
 ### 1.2 drivers/trusty_rescue（CONFIG_TRUSTY_RESCUE=y，bool 内置）
-- 源文件：本仓库 `patches/trusty-rescue/`（0001/0002 为驱动 + Kconfig/Makefile
-  挂钩，由 `.github/scripts/apply-patches.py` 应用）。
+- 源文件：本仓库 `drivers/trusty_rescue/` + `drivers/{Kconfig,Makefile}`（2026-10-30 起
+  delta 已烘进树，不再用 patches 目录）。
 - 要解决的问题：gz 擦除 → trusty SMC 版本握手失败 → gz_trusty_mod 的
   trusty_probe 返回 -22 → 其尾部 of_platform_populate("/trusty") 未执行 →
   /trusty/trusty-virtio 设备不存在 → gce-mbox-sec/-m-sec（secure cmdq mailbox）

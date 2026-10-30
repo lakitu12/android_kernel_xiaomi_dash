@@ -3,20 +3,6 @@ name: Build dash GKI 6.6.118-android15-8 - DroidSpaces + SukiSU Ultra (KPM + SUS
 on:
   workflow_dispatch:
     inputs:
-      hook_call_sites:
-        description: 'OS4 hook call sites: full (default) / none (definitions+exports only) / comma list of groups (0004,0005...)'
-        default: full
-        type: string
-      os4_hooks:
-        description: 'OS4 vendor hooks: on (default) or off (control build - node_cache/os_cpu_qi fail to load as on stock)'
-        default: 'on'
-        type: choice
-        options: ['on', 'off']
-      no_lz4_export:
-        description: 'Drop LZ4_compress_default from the KMI list: node_cache stops loading, os_cpu_qi keeps loading'
-        default: '0'
-        type: choice
-        options: ['0', '1']
       ksu_opts:
         description: 'KSU/SUSFS 单变量开关（逗号可组合）: default / no_kpm / no_hide_syms / no_susfs_feats / inert / nohooks'
         default: default
@@ -31,7 +17,6 @@ on:
     paths:
       - '.github/workflows/build.yml'
       - '.github/scripts/**'
-      - 'patches/**'
 
 jobs:
   build:
@@ -44,11 +29,9 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 120
     env:
-      # A pushed build is always the full series; the definitions-only variant
-      # is an explicit workflow_dispatch (single-variable on-device bisect).
-      HOOK_CALL_SITES: ${{ inputs.hook_call_sites || 'full' }}
-      OS4_HOOKS: ${{ inputs.os4_hooks || 'on' }}
-      NO_LZ4_EXPORT: ${{ inputs.no_lz4_export || '0' }}
+      # 我方的内核 delta（13 个 OS4 hook / trusty-rescue / pid 钳制）已经作为提交
+      # 烘进树里（git log 537ebbfb..HEAD），构建期只剩 KSU/SUSFS/KernelPatch 这些
+      # 外部注入的开关。
       KSU_OPTS: ${{ inputs.ksu_opts || 'default' }}
       KPM_PATCH: ${{ inputs.kpm_patch || 'on' }}
       # KernelPatch 工具链 pin：kptools 从 KP 源码构建（host 工具）；
@@ -161,18 +144,16 @@ jobs:
 
           git diff --stat || true
 
-      # 本仓库对 GKI 源树的全部改动都在 patches/ 下（标准 unified diff）：
-      #   patches/trusty-rescue/     gz 抹除后（nvhe/pKVM）相机链自救驱动 + nvhe cmdline
-      #   patches/os4-vendor-hooks/  dash OS4 厂商模块所需的 13 个 MTK vendor hook
-      #   patches/pid-max-clamp/     pid 空间钳到 32768（MKP 0x8000 类 bug 的规避）
-      # 应用器只做 git apply/patch，任何一处上下文对不上就中止构建；打完后自检每条改动。
-      - name: Apply maintenance patches (trusty-rescue + OS4 vendor hooks)
+      # 我方的内核 delta（13 个 OS4 vendor hook + trusty-rescue + pid 钳制）已经作为
+      # 提交烘进树里，构建时不再打补丁。这一步只做源码级门禁：任何一条改动丢了
+      # （错误合并、误 revert）立刻失败，而不是 20 分钟后编出一个静默功能不全的内核。
+      - name: Verify the in-tree dash delta
         run: |
           set -e
           cd ~/gki
           if [ -d common ]; then KDIR=common; elif [ -d kernel/common ]; then KDIR=kernel/common; else KDIR=$(find . -name "Kconfig" -path "*/arch/arm64/*" | head -n1 | xargs dirname | xargs dirname | xargs dirname); fi
           echo "KDIR=$KDIR"
-          bash "$GITHUB_WORKSPACE/.github/scripts/apply-tree-patches.sh" "$HOME/gki/$KDIR"
+          bash "$GITHUB_WORKSPACE/.github/scripts/verify-tree.sh" "$HOME/gki/$KDIR"
 
       # 诊断用黑匣子（仅诊断镜像需要，main 不合并）：内核侧每秒把最新 512KB
       # kmsg 写进 oops 分区的两个 1MB 槽，完全不依赖 init/mtdoops/console。
@@ -523,8 +504,10 @@ jobs:
             [ -s "$VM" ] || { echo "::error::reconstructed ELF is empty"; exit 1; }
             echo "reconstructed $VM ($(stat -c%s "$VM") bytes)"
           fi
-          # NO_LZ4_EXPORT=1 deliberately drops LZ4 (node_cache must fail to load),
-          # so it is required or forbidden depending on the switch.
+          # 13 个 OS4 stub tracehook + LZ4_compress_default 必须导出（__ksymtab_*）；
+          # 而且这些 probe 是**真的被调用**的，所以每个 __traceiter_* 的 KCFI 类型
+          # 哈希必须等于 stock 模块预期的那个（对不上就是首次触发 #brk panic）。
+          # delta 已经在树里，这两道门禁现在是无条件跑，不再有开关分支。
           HOOK_SYMS="__tracepoint_android_vh_remove_mapping __tracepoint_android_vh_remove_mapping_failed \
                      __tracepoint_android_vh_filemap_get_folio_end __tracepoint_android_vh_put_super \
                      __tracepoint_android_vh_fuse_request_end_ext __tracepoint_android_vh_fuse_request_fetch \
@@ -532,37 +515,13 @@ jobs:
                      __tracepoint_android_vh_percpu_rwsem_init __tracepoint_android_vh_rcu_boost_end \
                      __tracepoint_android_vh_rcu_boost_start __tracepoint_android_vh_sync_rcu_wait_end \
                      __tracepoint_android_vh_sync_rcu_wait_start"
-          if [ "${OS4_HOOKS}" = "off" ]; then
-            # control build: every OS4 tracehook must be ABSENT (no header, no export)
-            for SYM in $HOOK_SYMS LZ4_compress_default; do
-              readelf -sW "$VM" | grep -q "__ksymtab_$SYM" \
-                && { echo "::error::OS4_HOOKS=off but $SYM is exported (hook series not skipped?)"; exit 1; }
-            done
-            echo "OS4_HOOKS=off: no OS4 tracehook / LZ4 exports, as intended"
-          else
-            REQUIRED="$HOOK_SYMS"
-            if [ "${NO_LZ4_EXPORT}" = "1" ]; then
-              readelf -sW "$VM" | grep -q "__ksymtab_LZ4_compress_default" \
-                && { echo "::error::NO_LZ4_EXPORT=1 but LZ4_compress_default is still exported"; exit 1; }
-              echo "NO_LZ4_EXPORT=1: LZ4_compress_default correctly absent from ksymtab"
-            else
-              REQUIRED="$REQUIRED LZ4_compress_default"
-            fi
-            for SYM in $REQUIRED; do
-              readelf -sW "$VM" | grep -q "__ksymtab_$SYM" || { echo "::error::export missing for $SYM (OS4 stub injection failed)"; exit 1; }
-            done
-            echo "OS4 symbol-gap fix verified: $(echo $REQUIRED | wc -w) symbols exported"
-          fi
-          # The probes are now actually CALLED (call sites patched), so the KCFI
-          # type hash embedded in each __traceiter_* must equal the one the stock
-          # modules carry at -4(%probe). A mismatch is a #brk panic on first hit,
-          # so gate here: the hash set is pinned by the stock kernel disassembly.
-          if [ "${OS4_HOOKS}" = "off" ]; then
-            echo "OS4_HOOKS=off: skipping the KCFI hash gate (no stub traceiters in this build)"
-          else
-            python3 "$GITHUB_WORKSPACE/.github/scripts/verify-os4-kcfi.py" "$VM" /tmp/built-config \
-              || { echo "::error::OS4 stub prototypes do not match stock KCFI hashes - refusing to flash"; exit 1; }
-          fi
+          REQUIRED="$HOOK_SYMS LZ4_compress_default"
+          for SYM in $REQUIRED; do
+            readelf -sW "$VM" | grep -q "__ksymtab_$SYM" || { echo "::error::export missing for $SYM (OS4 stub injection failed)"; exit 1; }
+          done
+          echo "OS4 symbol-gap fix verified: $(echo $REQUIRED | wc -w) symbols exported"
+          python3 "$GITHUB_WORKSPACE/.github/scripts/verify-os4-kcfi.py" "$VM" /tmp/built-config \
+            || { echo "::error::OS4 stub prototypes do not match stock KCFI hashes - refusing to flash"; exit 1; }
 
           if [ "${{ matrix.variant }}" = "ksu" ]; then
             grep -q "^CONFIG_KSU=y$" /tmp/built-config || { echo "::error::KSU missing in ksu build"; exit 1; }
@@ -702,16 +661,8 @@ jobs:
 
           ui_print " Done. Kernel swapped; init_boot and vendor_boot untouched."
           AKSH
-          # Definitions-only builds must never be mistaken for the full series
-          # (2026-10-29: the full series bootlooped, so both get exercised).
+          # 产物后缀只由 KSU/SUSFS/KernelPatch 开关决定（内核 delta 已烘进树）。
           SUFFIX=""
-          if [ "${OS4_HOOKS}" = "off" ]; then
-            SUFFIX="-NOHOOKS"
-          elif [ "${NO_LZ4_EXPORT}" = "1" ]; then
-            SUFFIX="-NOLZ4"
-          elif [ "${HOOK_CALL_SITES}" != "full" ]; then
-            SUFFIX="-SITES$(echo "${HOOK_CALL_SITES}" | tr -d ',')"
-          fi
           case ",${KSU_OPTS}," in
             *,no_susfs_feats,*) SUFFIX="${SUFFIX}-NOSUSFSFEAT";;
             *,no_hide_syms,*)   SUFFIX="${SUFFIX}-NOHIDESYM";;

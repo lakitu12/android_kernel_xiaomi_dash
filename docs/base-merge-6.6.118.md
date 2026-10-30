@@ -111,12 +111,12 @@ EOF
 
 ## 验证
 
-树在**仓库根目录**（`Makefile`/`arch/`/`drivers/`… 与 `patches/` 并列）。
+树在**仓库根目录**（`Makefile`/`arch/`/`drivers/`… 与 `.github/`、`docs/` 并列）。
 
-补丁层（干净基底上 14 条补丁都要能 **exact `git apply`**，不能靠 fuzz）：
+构建前自检（delta 已烘进树，2026-10-30 起）：
 
 ```bash
-python3 .github/scripts/apply-patches.py --tree . --patches patches --check
+bash .github/scripts/verify-tree.sh .
 ```
 
 编译层（plain make + 预编译 clang 18，等价于 CI 的 gki_defconfig 门禁；BTF 关掉

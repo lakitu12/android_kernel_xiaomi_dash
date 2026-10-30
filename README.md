@@ -9,12 +9,12 @@ DroidSpaces（宿主容器）+ SukiSU Ultra（KPM + SUSFS）。仓库结构/方�
 ## 仓库结构（`main`，2026-10-30 起；原 patch-era 分支备份为 `main-legacy`）
 
 内核**源码树就在仓库根目录**（`Makefile` / `arch/` / `drivers/` / `mm/` … 与
-`patches/`、`.github/` 并列），CI 不再 `repo sync kernel/common`：
+`.github/`、`docs/` 并列），CI 不再 `repo sync kernel/common`：
 
 | 路径 | 内容 |
 |---|---|
 | 仓库根 | 完整内核树：小米 `dash-w-oss`（MTK `t-alps-release-v0.mp1.rc-V13.94`，Makefile 6.6.89 = ACK `android15-6.6-2025-06_r1`）三方合并 ACK `android15-6.6-2026-01_r1`（6.6.118） |
-| `patches/` | **我方全部 delta**（trusty-rescue / os4-vendor-hooks / pid-max-clamp），CI 用 `apply-tree-patches.sh` 打到树上 |
+| 内核树里的 3 个 delta 提交 | OS4 13 hook / trusty-rescue / pid 钳制，直接烘在树里（`git log 537ebbfb..`），构建时零打补丁 |
 | `.github/` | 只 sync 构建基建（`build/kernel` + prebuilts + `kernel/configs`）；`kernel/common` 从 manifest remove，再把本仓 checkout rsync 成 `common/` 并 `git init` |
 
 > 根 `README.md` 是本仓库的项目说明（覆盖了上游 kernel/common 的 `README.md`，
@@ -46,10 +46,12 @@ fork，纯 AOSP ACK 编出来的镜像与 vendor_dlkm 的 KMI 对不上（当初
 vendor hook 就是这件事的表征）。仓内树保留 MTK 自己的 vendor hook / ABI 符号表 /
 `Makefile.ext` / IRQ 回退等 vendor 改动，再把 AOSP 89→118 的修复合并在上面。
 
-树保持**干净基底**：补丁仍是唯一的「我方 delta」载体（一屏可 review、可回滚、
-上游漂移时干净失败），单变量开关（`HOOK_CALL_SITES` / `OS4_HOOKS` /
-`NO_LZ4_EXPORT`）因此继续可用。SukiSU / SUSFS / KPM **不入库**，仍在 CI 里按钉住的
-commit 打补丁——仓库里只有小米基底和我们自己的 3 个 series。
+我方 delta 以**提交**形式烘在树里（不再有 `patches/` 目录，2026-10-30 按用户要求取消）：
+review/revert 就是 `git log 537ebbfb..` + `git revert`；CI 只做源码级自检
+（`.github/scripts/verify-tree.sh`）和二进制门禁（`__ksymtab_*` / KCFI 哈希），不再打补丁。
+代价是原来的三个上机单变量开关（`HOOK_CALL_SITES` / `OS4_HOOKS` / `NO_LZ4_EXPORT`）随之
+取消——要分变体现在只能开分支。SukiSU / SUSFS / KPM **仍不入库**，继续在 CI 里按钉住的
+commit 打补丁。
 
 合并过程（18 个冲突的逐条取舍、本地怎么重做、怎么验证）见
 [docs/base-merge-6.6.118.md](docs/base-merge-6.6.118.md)。
