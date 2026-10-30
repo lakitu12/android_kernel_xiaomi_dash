@@ -45,6 +45,31 @@ DroidSpaces（宿主容器）+ SukiSU Ultra（KPM + SUSFS）。仓库结构/方�
   vendor ramdisk 在 vendor_boot）→ `flash_boot` 只换内核、init_boot/vendor_boot 不动
 - 产物：matrix `ksu` / `bypass` 双变体，Image + AK3 zip
 
+## KPM 与 KernelPatch 预补丁
+
+`CONFIG_KPM=y` **只编出一座桥**，不装 loader：`kernel/extension/kpm.c` 把 KPM
+能力位设成 `sukisu_kpm_bridge(SUKISU_KPM_PROBE) == SUKISU_KPM_ABI_VERSION`，而
+bridge 是拿魔法值去调 `__arm64_sys_truncate`（KernelPatch 复用 syscall 45 的
+supercall 入口）。内核里没有 KP 时 probe 返回 `-EOPNOTSUPP` → 管理器 KPM 能力位
+=0（dmesg `registered handler for kpm (id=0, caps=0x0, …)`）、`ksud kpm` 一律
+`os error 95`。换句话说：**不打 KP，KPM 永远不可用，跟 SukiSU 配置无关**。
+
+workflow 因此在 ksu 变体上多一步预补丁（`workflow_dispatch` 输入 `kpm_patch`，
+默认 `on`）：
+
+| 项 | 取值 |
+|---|---|
+| kpimg | `ShirkNeko/SukiSU_patch` 仓钉 commit 拉取，断言 sha256（与管理器 APK 内 `assets/kpm/kpimg` 逐字节一致） |
+| kptools | 从 `bmax121/KernelPatch` 钉 commit 现建（host 工具，需 cmake + zlib） |
+| superkey | 每次构建随机，`-S` 只把 hash 写进镜像；KPM 走 supercall syscall，不依赖它 |
+| 门禁 | `kptools -l` 必须 `patched=true`；产物后缀带 `-KP` 才代表 KPM 真可用 |
+| 跳过条件 | `ksu_opts` 含 `no_kpm`（没有桥，打了也没用） |
+
+实测（dash，6.6.118，KP e00）：预补丁后 17–23s 进桌面，583 模块、root、
+`os_cpu_qi`/`node_cache` 全正常；`ksud kpm load/unload/list/num/version` 全部
+`rc=0`，用 KP 自带 `demo-hello` 验证过 `load_module_ex: [kpm-hello-demo] succeed`。
+注意 KP 会在 boot 早期跑自己的初始化代码，且 superkey（或 hash）进 boot.img。
+
 ## 首刷安全规程（A/B 守护，同 marble）
 
 ```bash
