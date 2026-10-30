@@ -18,7 +18,7 @@ on:
         type: choice
         options: ['0', '1']
       ksu_opts:
-        description: 'KSU/SUSFS 单变量开关（逗号可组合）: default / no_kpm / no_hide_syms / no_susfs_feats / inert'
+        description: 'KSU/SUSFS 单变量开关（逗号可组合）: default / no_kpm / no_hide_syms / no_susfs_feats / inert / nohooks'
         default: default
         type: string
   push:
@@ -351,6 +351,24 @@ jobs:
           python3 "$GITHUB_WORKSPACE/.github/scripts/check-susfs-pair.py" \
             --tree . --ksu drivers/kernelsu --susfs-patch "$SFX"
 
+          # KSU_OPTS=nohooks：把 SUSFS 的「当前进程是否标记 no_su」判定钉成 true，
+          # 于是所有 SUSFS 源码级 hook（fs/exec.c、fs/namei.c 等）都走原版路径。
+          # 用来区分「SUSFS 的 hook 代码」与「KSU 代码/镜像体积」哪个是崩因。
+          if echo ",${KSU_OPTS}," | grep -q ',nohooks,'; then
+            python3 - <<'PYEOF'
+          import re
+          p = 'include/linux/susfs_def.h'
+          s = open(p).read()
+          old = 'return (likely(test_thread_flag(TIF_PROC_NO_SU)));'
+          if old not in s:
+              raise SystemExit('no_su body not found')
+          s = s.replace(old, 'return true; /* NOHOOKS build */')
+          open(p, 'w').write(s)
+          print('nohooks: susfs_is_current_proc_no_su() -> true')
+          PYEOF
+            grep -n -A3 'susfs_is_current_proc_no_su(void)' include/linux/susfs_def.h | head -8
+          fi
+
           # KSU + KPM + SUSFS configs (mirrors WildKernels known-good set)
           DEFCONFIG=~/gki/common/arch/arm64/configs/gki_defconfig
           for CFG in KSU KPM KSU_MANUAL_SU KSU_SUSFS KSU_SUSFS_SUS_PATH KSU_SUSFS_SUS_MOUNT KSU_SUSFS_SUS_KSTAT KSU_SUSFS_SPOOF_UNAME KSU_SUSFS_ENABLE_LOG KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG KSU_SUSFS_OPEN_REDIRECT KSU_SUSFS_SUS_MAP; do
@@ -635,6 +653,7 @@ jobs:
             *,no_susfs_feats,*) SUFFIX="${SUFFIX}-NOSUSFSFEAT";;
             *,no_hide_syms,*)   SUFFIX="${SUFFIX}-NOHIDESYM";;
             *,inert,*)          SUFFIX="${SUFFIX}-INERT";;
+            *,nohooks,*)        SUFFIX="${SUFFIX}-NOHOOKS";;
           esac
           if echo ",${KSU_OPTS}," | grep -q ',no_kpm,'; then SUFFIX="${SUFFIX}-NOKPM"; fi
           if [ "${{ matrix.variant }}" = "ksu" ]; then
