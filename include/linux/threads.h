@@ -31,8 +31,13 @@
  * A maximum of 4 million PIDs should be enough for a while.
  * [NOTE: PID/TIDs are limited to 2^30 ~= 1 billion, see FUTEX_TID_MASK.]
  */
-#define PID_MAX_LIMIT (CONFIG_BASE_SMALL ? PAGE_SIZE * 8 : \
-	(sizeof(long) > 4 ? 4 * 1024 * 1024 : PID_MAX_DEFAULT))
+/*
+ * dash maintenance (droidspaces kernel): clamped to PID_MAX_DEFAULT so the
+ * allocatable id space stays inside 0x8000. Stock ships 4M here, and ~8% of
+ * the reachable ids then have the high bit set -- the precondition for the
+ * MKP 0x8000 pid-mask bug class. 32768 ids is plenty for this device.
+ */
+#define PID_MAX_LIMIT PID_MAX_DEFAULT
 
 /*
  * Define a minimum number of pids per cpu.  Heuristically based

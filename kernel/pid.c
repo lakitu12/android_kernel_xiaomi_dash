@@ -64,7 +64,7 @@ int pid_max = PID_MAX_DEFAULT;
 #define RESERVED_PIDS		300
 
 int pid_max_min = RESERVED_PIDS + 1;
-int pid_max_max = PID_MAX_LIMIT;
+int pid_max_max = PID_MAX_DEFAULT; /* dash: hard clamp, see threads.h */
 
 /*
  * PID-map pages start out as NULL, they get allocated upon
