@@ -169,3 +169,7 @@ sphinx_*/
 
 # Rust analyzer configuration
 /rust-project.json
+
+# --- dash repo extras (not part of the upstream tree) ---
+__pycache__/
+*.pyc

@@ -1,0 +1,763 @@
+name: Build dash GKI 6.6.118-android15-8 - DroidSpaces + SukiSU Ultra (KPM + SUSFS)
+
+on:
+  workflow_dispatch:
+    inputs:
+      hook_call_sites:
+        description: 'OS4 hook call sites: full (default) / none (definitions+exports only) / comma list of groups (0004,0005...)'
+        default: full
+        type: string
+      os4_hooks:
+        description: 'OS4 vendor hooks: on (default) or off (control build - node_cache/os_cpu_qi fail to load as on stock)'
+        default: 'on'
+        type: choice
+        options: ['on', 'off']
+      no_lz4_export:
+        description: 'Drop LZ4_compress_default from the KMI list: node_cache stops loading, os_cpu_qi keeps loading'
+        default: '0'
+        type: choice
+        options: ['0', '1']
+      ksu_opts:
+        description: 'KSU/SUSFS 单变量开关（逗号可组合）: default / no_kpm / no_hide_syms / no_susfs_feats / inert / nohooks'
+        default: default
+        type: string
+      kpm_patch:
+        description: 'KernelPatch 预补丁（KPM 真正可用）: on (default) / off — CONFIG_KPM 只是桥，没 KP 时 ksud kpm 一律 EOPNOTSUPP'
+        default: 'on'
+        type: choice
+        options: ['on', 'off']
+  push:
+    branches: [main, master]
+    paths:
+      - '.github/workflows/build.yml'
+      - '.github/scripts/**'
+      - 'patches/**'
+
+jobs:
+  build:
+    # KSU (root + SUSFS + KPM) and BYPASS (no-KSU) builds run in parallel on
+    # separate runners (same parallelization as marble: ~18min vs ~35min serial)
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: [ksu, bypass]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    env:
+      # A pushed build is always the full series; the definitions-only variant
+      # is an explicit workflow_dispatch (single-variable on-device bisect).
+      HOOK_CALL_SITES: ${{ inputs.hook_call_sites || 'full' }}
+      OS4_HOOKS: ${{ inputs.os4_hooks || 'on' }}
+      NO_LZ4_EXPORT: ${{ inputs.no_lz4_export || '0' }}
+      KSU_OPTS: ${{ inputs.ksu_opts || 'default' }}
+      KPM_PATCH: ${{ inputs.kpm_patch || 'on' }}
+      # KernelPatch 工具链 pin：kptools 从 KP 源码构建（host 工具）；
+      # kpimg 与管理器 APK 里 bundled 的那份逐字节相同（sha256 14fc6564…），
+      # 由 SukiSU 维护者维护在 SukiSU_patch 仓。branch HEAD 会漂，所以钉 commit。
+      KP_COMMIT: d4c88d6672687456b299e4b5153c24dc979d789b
+      KPIMG_COMMIT: eec45788c9a115e5498040298133336d6b6071dd
+      KPIMG_SHA256: 14fc6564fa092afe4a2293268cd061da64a20f61dc91396a404daf13d053f5ca
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git make bc bison flex libssl-dev libelf-dev \
+            python3 python-is-python3 cpio pahole libncurses-dev rsync \
+            curl zip unzip tar xz-utils gcc g++ gawk openssl \
+            cmake zlib1g-dev
+
+      - name: Install repo
+        run: |
+          mkdir -p ~/bin
+          curl -fsSL https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          echo "$HOME/bin" >> $GITHUB_PATH
+
+      - name: Sync GKI build infra (kleaf + toolchains), link the in-repo kernel tree
+        run: |
+          mkdir -p ~/gki
+          cd ~/gki
+          # The kernel SOURCE lives in this repo (kernel/): Xiaomi dash-w-oss
+          # (MTK t-alps-release-v0.mp1.rc-V13.94, Linux 6.6.89) three-way merged
+          # with ACK android15-6.6-2026-01_r1 => Linux 6.6.118, the release dash
+          # stock (6.6.118-android15-8-gc44b714366cc-abogki519650608-4k) is built
+          # from. NEVER go back to tracking branch HEAD common-android15-6.6 -
+          # it drifts and vermagic/CRC drift vs vendor modules = bootloop.
+          # Only the build infra (build/kernel + prebuilts + kernel/configs) is
+          # still synced; kernel/common is removed from the manifest and replaced
+          # by a symlink to the checkout, so the build never sees an AOSP tree.
+          repo init -u https://android.googlesource.com/kernel/manifest -b common-android15-6.6-2026-01 --depth=1
+          mkdir -p .repo/local_manifests
+          cat > .repo/local_manifests/dash-no-common.xml <<'LM'
+          <manifest>
+            <remove-project name="kernel/common" />
+          </manifest>
+          LM
+          repo sync -c -j$(nproc --all) --no-tags --no-clone-bundle --optimized-fetch --prune
+          # The kernel source IS this checkout (tree at the repo root). Copy it into
+          # the kleaf workspace instead of symlinking: bazel would have to treat a
+          # symlinked dir as a package, and apply-patches.py wants a git work tree
+          # whose *root* is the tree (patches use `git apply -C common`).
+          rsync -a --exclude=.git --exclude=out "$GITHUB_WORKSPACE/" common/
+          ( cd common && git init -q )
+          echo "=== build infra synced, common = copy of the in-repo tree ==="
+          du -sh ~/gki ~/gki/build ~/gki/prebuilts
+          KD=common
+          # Fail fast if the in-repo tree is not 6.6.118 (GNU Makefile 'SUBLEVEL = 118')
+          SUB=$(grep -E "^[[:space:]]*SUBLEVEL" "$KD/Makefile" | head -n1)
+          echo "Makefile: $(head -n5 "$KD/Makefile" | tr '\n' ' ') | $SUB"
+          echo "$SUB" | grep -Eq "SUBLEVEL[[:space:]]*=[[:space:]]*118" || { echo "::error::in-repo kernel is not 6.6.118 (got: $SUB)"; exit 1; }
+          # Vendor-faithfulness gate: these only exist in the Xiaomi/MTK tree.
+          # If they are gone the merge lost the vendor base and we are silently
+          # building plain AOSP again (the exact failure mode this repo exists to
+          # prevent: OS4 vendor modules stop loading).
+          for f in Makefile.ext android/gki_aarch64_protected_modules; do
+            [ -f "$KD/$f" ] || { echo "::error::kernel/$f missing - in-repo tree is not the Xiaomi base"; exit 1; }
+          done
+          grep -q 'Makefile.ext' "$KD/drivers/Makefile" || { echo "::error::drivers/Makefile lost the MTK Makefile.ext include"; exit 1; }
+          echo "vendor base intact (Makefile.ext + protected_modules list + drivers/Makefile hook)"
+          # Version string: .scmversion is DEAD on 6.x and kleaf replaces
+          # scripts/setlocalversion with its own localversion rule (kleaf/impl/
+          # stamp.bzl). Without --config=stamp it emits the literal "-maybe-dirty".
+          # Fix at the source: patch that echo to our suffix and do NOT set
+          # CONFIG_LOCALVERSION (it would be appended AFTER the file content).
+          # OBSERVED (run 33304453206) file content = "-android15-8-maybe-dirty"
+          # (KMI tail comes from the same file) -> after patch:
+          #   6.6.118-android15-8-droidspaces-lakitu
+          echo '# CONFIG_LOCALVERSION_AUTO is not set' >> "$KD/arch/arm64/configs/gki_defconfig"
+          # Patch kleaf no-stamp version source: build/kleaf/impl/stamp.bzl emits
+          # literal "-maybe-dirty" when --config=stamp is absent; replace with our
+          # suffix (this file ALSO carries the -android15-8 KMI tail).
+          STAMP_BZL=~/gki/build/kleaf/impl/stamp.bzl
+          [ -f "$STAMP_BZL" ] || STAMP_BZL=$(find ~/gki/build -name stamp.bzl -path "*kleaf*" 2>/dev/null | head -n1)
+          [ -f "$STAMP_BZL" ] || { echo "::error::kleaf stamp.bzl not found"; exit 1; }
+          sed -i "s/echo '-maybe-dirty'/echo '-droidspaces-lakitu'/" "$STAMP_BZL"
+          grep -n "droidspaces-lakitu\|maybe-dirty" "$STAMP_BZL" || true
+
+      - name: Apply DroidSpaces kABI patches (GKI 6.6 = below-6.12 set)
+        run: |
+          set -e
+          cd ~/gki
+          # Clone DroidSpaces-OSS for patches
+          git clone --depth=1 https://github.com/ravindu644/Droidspaces-OSS /tmp/Droidspaces-OSS
+          # Upstream dir name has capital ABI (kABI); keep lowercase literal here.
+          ls /tmp/Droidspaces-OSS/Documentation/resources/kernel-patches/GKI/below-kernel-6.12/
+
+          # Find kernel common dir (manifest puts kernel in ./common)
+          if [ -d common ]; then KDIR=common; elif [ -d kernel/common ]; then KDIR=kernel/common; else KDIR=$(find . -name "Kconfig" -path "*/arch/arm64/*" | head -n1 | xargs dirname | xargs dirname | xargs dirname); fi
+          echo "KDIR=$KDIR"
+
+          cd "$KDIR"
+          # 1) SYSVIPC kABI fix - 6.7/6.8 variant is the recommended one for 6.6
+          #    (task_struct padding via ANDROID_KABI_RESERVE; dash stock has
+          #    CONFIG_ANDROID_KABI_RESERVE=y confirmed in ikconfig)
+          echo "=== Apply 001 SYSVIPC kABI (6_7_8 variant) ==="
+          patch -p1 < /tmp/Droidspaces-OSS/Documentation/resources/kernel-patches/GKI/below-kernel-6.12/001.GKI-below-6.12-fix_sysvipc_kabi_6_7_8.patch
+          # NOTE: NO 002 POSIX_MQUEUE patch - that one is 5.10-and-below only.
+
+          git diff --stat || true
+
+      # 本仓库对 GKI 源树的全部改动都在 patches/ 下（标准 unified diff）：
+      #   patches/trusty-rescue/     gz 抹除后（nvhe/pKVM）相机链自救驱动 + nvhe cmdline
+      #   patches/os4-vendor-hooks/  dash OS4 厂商模块所需的 13 个 MTK vendor hook
+      #   patches/pid-max-clamp/     pid 空间钳到 32768（MKP 0x8000 类 bug 的规避）
+      # 应用器只做 git apply/patch，任何一处上下文对不上就中止构建；打完后自检每条改动。
+      - name: Apply maintenance patches (trusty-rescue + OS4 vendor hooks)
+        run: |
+          set -e
+          cd ~/gki
+          if [ -d common ]; then KDIR=common; elif [ -d kernel/common ]; then KDIR=kernel/common; else KDIR=$(find . -name "Kconfig" -path "*/arch/arm64/*" | head -n1 | xargs dirname | xargs dirname | xargs dirname); fi
+          echo "KDIR=$KDIR"
+          bash "$GITHUB_WORKSPACE/.github/scripts/apply-tree-patches.sh" "$HOME/gki/$KDIR"
+
+      # 诊断用黑匣子（仅诊断镜像需要，main 不合并）：内核侧每秒把最新 512KB
+      # kmsg 写进 oops 分区的两个 1MB 槽，完全不依赖 init/mtdoops/console。
+      # 由 cmdline token bootdiag=flash 激活。
+      - name: DIAG inject boot_diag recorder (1s cadence, oops partition)
+        run: |
+          set -e
+          cd ~/gki
+          if [ -d common ]; then KDIR=common; elif [ -d kernel/common ]; then KDIR=kernel/common; else KDIR=$(find . -name "Kconfig" -path "*/arch/arm64/*" | head -n1 | xargs dirname | xargs dirname | xargs dirname); fi
+          T=$HOME/gki/$KDIR
+          cp "$GITHUB_WORKSPACE/.github/scripts/boot_diag_recorder.c" "$T/drivers/misc/boot_diag.c"
+          grep -q 'boot_diag.o' "$T/drivers/misc/Makefile" || echo 'obj-y += boot_diag.o' >> "$T/drivers/misc/Makefile"
+          head -5 "$T/drivers/misc/boot_diag.c"
+          tail -2 "$T/drivers/misc/Makefile"
+
+      - name: Patch gki_defconfig for DroidSpaces
+        run: |
+          set -e
+          DEFCONFIG=~/gki/common/arch/arm64/configs/gki_defconfig
+
+          # Helper: ensure CONFIG_FOO=y (replace is not set or append)
+          ensure_y() {
+            local cfg="$1"
+            local file="$DEFCONFIG"
+            if grep -q "# CONFIG_${cfg} is not set" "$file"; then
+              sed -i "s/# CONFIG_${cfg} is not set/CONFIG_${cfg}=y/" "$file"
+              echo " -> $cfg: replaced not set -> y"
+            elif grep -q "CONFIG_${cfg}=y" "$file"; then
+              echo " -> $cfg already y"
+            elif grep -q "CONFIG_${cfg}=" "$file"; then
+              sed -i "s/CONFIG_${cfg}=.*/CONFIG_${cfg}=y/" "$file"
+              echo " -> $cfg: flipped -> y"
+            else
+              echo "CONFIG_${cfg}=y" >> "$file"
+              echo " -> $cfg: appended y"
+            fi
+          }
+
+          # DroidSpaces GKI exclusive fragment (from Kernel-Configuration.md#GKI)
+          # dash stock ikconfig ground truth (2026-08-30, extract-ikconfig on stock Image):
+          #   SYSVIPC / POSIX_MQUEUE / IPC_NS / PID_NS / DEVTMPFS / USER_NS /
+          #   TMPFS_XATTR / TMPFS_POSIX_ACL / NETFILTER_XT_MATCH_ADDRTYPE / IP_SET
+          #   are all OFF in stock -> every one of these is a real kABI-relevant flip.
+          ensure_y SYSVIPC
+          ensure_y POSIX_MQUEUE
+          ensure_y IPC_NS
+          ensure_y PID_NS
+          ensure_y DEVTMPFS
+          ensure_y NETFILTER_XT_MATCH_ADDRTYPE
+          # Optional recommended
+          ensure_y USER_NS
+          ensure_y TMPFS_POSIX_ACL
+          ensure_y TMPFS_XATTR
+          ensure_y NETFILTER_XT_TARGET_REJECT
+          ensure_y NETFILTER_XT_TARGET_LOG
+          ensure_y NETFILTER_XT_MATCH_RECENT
+          ensure_y IP_SET
+          ensure_y IP_SET_HASH_IP
+          ensure_y IP_SET_HASH_NET
+          ensure_y NETFILTER_XT_SET
+
+          # KPROBES/KALLSYMS for KSU/SukiSU (harmless in bypass too).
+          # dash stock: KPROBES=y already; KALLSYMS=y + KALLSYMS_ALL=y already.
+          ensure_y KPROBES
+          ensure_y KALLSYMS
+          ensure_y KALLSYMS_ALL
+
+          # MODULE_SIG_PROTECT MUST be disabled for GKI 3.0 (android15-6.6).
+          # Stock=y works because Google's module-signing key is compiled into
+          # the stock trusted ring. A self-built kernel only trusts its own
+          # kleaf-internal key, so every Google-signed system_dlkm module that
+          # EXPORTS a protected symbol (rfkill, bluetooth, mii, ppp*, usbnet,
+          # virtio*, can*, ...) is refused with "exports protected symbol"
+          # (EACCES, silent at boot) -> cfg80211 "Unknown symbol rfkill_alloc"
+          # -> WiFi + BT dead. Observed & isolated on dash 2026-08-30 (8021q/
+          # gzvm load fine - their exports are unprotected; insmod rfkill/mii
+          # refused even in permissive). Stock's trust path cannot be replicated
+          # (no access to Google's signing cert chain); WildKernels' equivalent
+          # is stripping protected exports. Minimal fix: turn the gate off.
+          # No task_struct/ABI/CRC impact (module.c load-time policy only).
+          sed -i 's/^CONFIG_MODULE_SIG_PROTECT=y/# CONFIG_MODULE_SIG_PROTECT is not set/' "$DEFCONFIG"
+          grep -q "^# CONFIG_MODULE_SIG_PROTECT is not set" "$DEFCONFIG" || { echo "::error::failed to disable MODULE_SIG_PROTECT"; exit 1; }
+          echo "MODULE_SIG_PROTECT disabled (system_dlkm protected-symbol gate off)"
+
+          # LTO/CFI MUST match the stock kernel environment or vendor_dlkm modules
+          # fail to load -> bootloop (marble lesson, validated both ways).
+          # dash stock ikconfig ground truth: CONFIG_LTO_NONE=y + CONFIG_CFI_CLANG=y.
+          # => keep LTO_NONE as stock (do NOT enable THIN: a different LTO mode changes
+          #    codegen and CRCs vs vendor modules) and keep CFI as stock.
+          # Side effect: no LTO = no OOM risk on 7GB runners (marble needed LTO_THIN
+          # only because stock was LTO_FULL).
+          grep -E "CONFIG_LTO|CONFIG_CFI" "$DEFCONFIG" || true
+
+          # Bypass GKI savedefconfig check (fragment appended at end, not sorted)
+          sed -i 's/POST_DEFCONFIG_CMDS="check_defconfig"/POST_DEFCONFIG_CMDS="true"/' ~/gki/common/build.config.gki || true
+          echo "=== gki_defconfig tail ==="
+          tail -n 40 "$DEFCONFIG"
+
+      # trusty-rescue (driver + kvm-arm.mode=nvhe cmdline) is applied by the
+      # "Apply maintenance patches" step above, for BOTH variants.
+      - name: Setup SukiSU Ultra builtin + KPM + SUSFS configs
+        if: matrix.variant == 'ksu'
+        run: |
+          set -e
+          cd ~/gki
+          # PIN builtin branch: it defines KSU_SUSFS* Kconfig symbols + KSU-side SUSFS impl.
+          # No-arg setup.sh checks out latest release tag (main-based) which LACKS SUSFS symbols
+          # -> all 10 KSU_SUSFS defconfig entries silently dropped by kconfig (marble lesson).
+          # DRIFT GUARD (run 34441463481, 2026-09-10): floating `builtin` branch broke.
+          # builtin@e2912817f4 (v4.2.0) deleted kernel_umount_feature_set() but LEFT
+          # `.set_handler = kernel_umount_feature_set` -> clang "use of undeclared
+          # identifier" after ~12 min of build. That breakage is fixed upstream now
+          # (verified at the pin below: handler is defined again), and the x86-style
+          # fail-fast just below still catches any regression in seconds.
+          # 2026-10-29: bumped from v4.1.3-6c5603f0 to the builtin tip b59170724cdc
+          # (2026-10-27). NOTE: the newest *release* v4.2.1-r2 = d6b36700f3bd is
+          # main-lineage and carries NO KSU_SUSFS Kconfig at all -> all 10 SUSFS
+          # defconfig entries would be silently dropped (the marble lesson).
+          # builtin@b5917072 has the 10 SUSFS symbols AND every ksu_* symbol the
+          # pinned susfs4ksu patch calls (signatures verified equal), so it is the
+          # SUSFS-capable equivalent of that release.
+          KSU_PIN=b59170724cdc
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s "$KSU_PIN"
+          ls -l common/drivers/kernelsu
+          # This build runs clang with -Werror,-Wimplicit-fallthrough, and clang
+          # does not accept the legacy "/* fall through */" comment in C mode -
+          # it wants the statement (the kernel's fallthrough macro, in-tree since
+          # 5.15). builtin@b5917072 still ships one such comment in
+          # policy/allowlist.c:migrate_profile(); that alone fails the whole build
+          # (run 40816847987, after ~12 min). Rewrite it in the KSU tree only;
+          # drop this once upstream switches to fallthrough;.
+          KSU_DIR=common/drivers/kernelsu
+          if grep -rq '/\* fall through \*/' "$KSU_DIR"; then
+            echo "rewriting legacy fallthrough annotations:"
+            grep -rl '/\* fall through \*/' "$KSU_DIR" | while read -r f; do
+              echo "  $f"
+              sed -i 's|/\* fall through \*/|fallthrough;|g' "$f"
+            done
+          fi
+          ! grep -rq '/\* fall through \*/' "$KSU_DIR" || { echo "::error::fallthrough annotation still present"; exit 1; }
+          # Fail-fast static guard against dangling feature handlers (catch upstream
+          # breakage in seconds instead of burning ~12 min of build):
+          KU=common/drivers/kernelsu/feature/kernel_umount.c
+          if grep -q '\.set_handler = kernel_umount_feature_set' "$KU" && ! grep -q 'static int kernel_umount_feature_set' "$KU"; then
+            echo "::error::SukiSU $KSU_PIN: kernel_umount.c references missing kernel_umount_feature_set() - upstream compile breakage, re-pin a good builtin commit"
+            exit 1
+          fi
+          echo "kernel_umount.c handler refs OK"
+
+          # KSU_OPTS=inert：KSU 代码仍在镜像里（布局/体积不变），但 kernelsu_init 立刻返回，
+          # 不注册任何 hook/LSM/符号。用来区分「是 KSU 的逻辑」还是「KSU 在镜像里这件事」。
+          if echo ",${KSU_OPTS}," | grep -q ',inert,'; then
+            python3 - "$KSU_DIR/ksu_main.c" <<'PYEOF'
+          import re, sys
+          p = sys.argv[1]
+          s = open(p).read()
+          m = re.search(r'int __init kernelsu_init\(void\)\n\{\n', s)
+          if not m:
+              sys.exit('kernelsu_init signature not found')
+          ins = ('static bool ksu_inert_build = true;\n\n'
+                 'int __init kernelsu_init(void)\n{\n'
+                 '\tif (ksu_inert_build) {\n'
+                 '\t\tpr_info("kernelsu: INERT build, no hooks installed\\n");\n'
+                 '\t\treturn 0;\n'
+                 '\t}\n')
+          s = s[:m.start()] + ins + s[m.end():]
+          open(p, 'w').write(s)
+          print('inert patch applied')
+          PYEOF
+            grep -n -A4 'int __init kernelsu_init' "$KSU_DIR/ksu_main.c" | head -10
+          fi
+
+          # SUSFS kernel-side files + GKI patch. Branch gki-android15-6.6 EXISTS
+          # (verified: 50_add_susfs_in_gki-android15-6.6.patch present, HTTP 200).
+          # The KSU and SUSFS pins are a PAIR: both must come from the same window,
+          # because the interface drifts in both directions (see the static gate
+          # below, which now checks both). History:
+          #   run 34444400054 (2026-09-10): susfs HEAD added a ksu_install_su_fd()
+          #     call -> "undefined symbol" at vmlinux link (~18 min); re-pinned
+          #     SUSFS back to 8224c73, the frontier before that demand.
+          #   2026-10-29: KSU bumped to builtin@b5917072, which calls
+          #     susfs_parse_priority_app_strings()/susfs_set_priority_uid_filter()
+          #     and uses CMD_SUSFS_SET_PRIORITY_UID_FILTER -> 8224c73 lacks all
+          #     three (run 40811464365 died in drivers/kernelsu/supercall/dispatch.c
+          #     after ~9 min). c05208e "susfs: Add priority uid filter" introduces
+          #     them; pin the branch tip, which also carries c05208e's follow-up
+          #     UAF fix (0606e19).
+          SUSFS_PIN=0606e19afae93ffc88e53883dbf3cfced62a7b59
+          git clone -q https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android15-6.6 /tmp/susfs4ksu
+          git -C /tmp/susfs4ksu checkout -q "$SUSFS_PIN"
+          # Fail-fast #2 (the full both-direction check runs right after the 50_
+          # patch is applied, once every kernel-side SUSFS file is in place).
+          SFX=/tmp/susfs4ksu/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch
+          echo "susfs4ksu pinned $(git -C /tmp/susfs4ksu rev-parse --short HEAD)"
+          SUSFS_VER=$(grep -m1 'SUSFS_VERSION' /tmp/susfs4ksu/kernel_patches/include/linux/susfs.h | cut -d'"' -f2 || echo unknown)
+          echo "SUSFS $SUSFS_VER"
+          cp -v /tmp/susfs4ksu/kernel_patches/fs/* common/fs/
+          cp -v /tmp/susfs4ksu/kernel_patches/include/linux/* common/include/linux/
+          cd common
+          echo "=== apply 50_add_susfs_in_gki-android15-6.6.patch ==="
+          patch -p1 < /tmp/susfs4ksu/kernel_patches/50_add_susfs_in_gki-android15-6.6.patch
+          # Both-direction pairing gate: fails here in ~1 s instead of in the
+          # compiler ~9-18 min later if either pin drifted.
+          python3 "$GITHUB_WORKSPACE/.github/scripts/check-susfs-pair.py" \
+            --tree . --ksu drivers/kernelsu --susfs-patch "$SFX"
+
+          # KSU_OPTS=nohooks：把 SUSFS 的「当前进程是否标记 no_su」判定钉成 true，
+          # 于是所有 SUSFS 源码级 hook（fs/exec.c、fs/namei.c 等）都走原版路径。
+          # 用来区分「SUSFS 的 hook 代码」与「KSU 代码/镜像体积」哪个是崩因。
+          if echo ",${KSU_OPTS}," | grep -q ',nohooks,'; then
+            python3 - <<'PYEOF'
+          import re
+          p = 'include/linux/susfs_def.h'
+          s = open(p).read()
+          old = 'return (likely(test_thread_flag(TIF_PROC_NO_SU)));'
+          if old not in s:
+              raise SystemExit('no_su body not found')
+          s = s.replace(old, 'return true; /* NOHOOKS build */')
+          open(p, 'w').write(s)
+          print('nohooks: susfs_is_current_proc_no_su() -> true')
+          PYEOF
+            grep -n -A3 'susfs_is_current_proc_no_su(void)' include/linux/susfs_def.h | head -8
+          fi
+
+          # KSU + KPM + SUSFS configs (mirrors WildKernels known-good set)
+          DEFCONFIG=~/gki/common/arch/arm64/configs/gki_defconfig
+          for CFG in KSU KPM KSU_MANUAL_SU KSU_SUSFS KSU_SUSFS_SUS_PATH KSU_SUSFS_SUS_MOUNT KSU_SUSFS_SUS_KSTAT KSU_SUSFS_SPOOF_UNAME KSU_SUSFS_ENABLE_LOG KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG KSU_SUSFS_OPEN_REDIRECT KSU_SUSFS_SUS_MAP; do
+            sed -i "/^# CONFIG_${CFG} is not set/d; /^CONFIG_${CFG}=/d" "$DEFCONFIG"
+            echo "CONFIG_${CFG}=y" >> "$DEFCONFIG"
+          done
+          # 单变量开关：每个 case 只关掉一样东西，产物后缀会标出来
+          case ",${KSU_OPTS}," in
+            *,no_kpm,*)
+              sed -i 's/^CONFIG_KPM=y$/# CONFIG_KPM is not set/' "$DEFCONFIG"
+              grep -q '^# CONFIG_KPM is not set' "$DEFCONFIG" || { echo "::error::KSU_OPTS no_kpm failed"; exit 1; }
+              echo "KSU_OPTS: KPM=off";;
+          esac
+          case ",${KSU_OPTS}," in
+            *,no_hide_syms,*)
+              sed -i 's/^CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y$/# CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS is not set/' "$DEFCONFIG"
+              echo "KSU_OPTS: SUSFS hide symbols=off";;
+          esac
+          case ",${KSU_OPTS}," in
+            *,no_susfs_feats,*)
+              for F in SUS_PATH SUS_MOUNT SUS_KSTAT SPOOF_UNAME ENABLE_LOG HIDE_KSU_SUSFS_SYMBOLS SPOOF_CMDLINE_OR_BOOTCONFIG OPEN_REDIRECT SUS_MAP; do
+                sed -i "s/^CONFIG_KSU_SUSFS_${F}=y$/# CONFIG_KSU_SUSFS_${F} is not set/" "$DEFCONFIG"
+              done
+              echo "KSU_OPTS: all SUSFS features=off";;
+          esac
+          grep -E "CONFIG_(KSU|KPM)" "$DEFCONFIG" | tail -n 16
+
+      - name: BYPASS variant guard (no KSU/KPM)
+        if: matrix.variant == 'bypass'
+        run: |
+          set -e
+          DEFCONFIG=~/gki/common/arch/arm64/configs/gki_defconfig
+          # No SukiSU setup ran: purge any KSU/KPM leftovers, must stay clean
+          sed -i -E '/^CONFIG_KSU[A-Z_]*=y$/d; /^CONFIG_KPM=y$/d' "$DEFCONFIG"
+          grep -E "^(CONFIG_KSU|CONFIG_KPM)" "$DEFCONFIG" && { echo "::error::bypass defconfig must not enable KSU/KPM"; exit 1; } || echo "bypass defconfig clean (no KSU/KPM)"
+
+      - name: Build GKI kernel
+        run: |
+          set -eo pipefail
+          # Swap margin (harmless without LTO; keeps pahole/BTF steps safe)
+          sudo swapoff -a 2>/dev/null || true
+          sudo fallocate -l 12G /swapfile || sudo dd if=/dev/zero of=/swapfile bs=1M count=12288
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          free -h
+
+          cd ~/gki
+          # KMI strict check off for CI (kABI patches shift some CRCs by design).
+          # build/build.sh does NOT exist on android15-6.6 manifests (legacy build
+          # removed; kleaf/bazel is the only path) -> follow WildKernels' split:
+          # patch check_defconfig into common/BUILD.bazel, then tools/bazel build.
+          if [ -f build/build.sh ]; then
+            sed -i 's/KMI_SYMBOL_LIST_STRICT_MODE=1/KMI_SYMBOL_LIST_STRICT_MODE=0/' common/build.config.gki.aarch64 || true
+            set -o pipefail
+            KMI_SYMBOL_LIST_STRICT_MODE=0 BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh -j2 2>&1 | tee build.log
+          else
+            # Disable the savedefconfig gate in kleaf (fragment appended, not sorted).
+            grep -q 'check_defconfig = "disabled"' common/BUILD.bazel || \
+              sed -i '/name = "kernel_aarch64",/a\    check_defconfig = "disabled",' common/BUILD.bazel
+            grep -B2 -A3 'check_defconfig' common/BUILD.bazel || true
+            # NOTE: no --config=stamp -> Kleaf inserts a literal "-maybe-dirty"
+            # placeholder into the version string; the KMI tail "-android15-8"
+            # is still injected by the build-config chain (BRANCH/KMI_GENERATION
+            # env). OBSERVED (run 33304453206):
+            #   6.6.118-android15-8-maybe-dirty-droidspaces-lakitu
+            # Cosmetic only: MODVERSIONS same_magic() skips the first vermagic
+            # token; vendor module matching is by CRC/flags, not this string.
+            tools/bazel build \
+              --config=fast \
+              --disk_cache=/home/runner/.cache/bazel \
+              //common:kernel_aarch64/Image 2>&1 | tee build.log
+          fi
+          echo "=== Build finished ==="
+          find . -path ./out -prune -o -name "Image" -path "*kernel_aarch64*" -print 2>/dev/null
+          ls -lh bazel-bin/common/kernel_aarch64/Image 2>/dev/null || true
+
+      - name: Version gate + ikconfig assertions (${{ matrix.variant }})
+        run: |
+          set -e
+          IMG=~/gki/bazel-bin/common/kernel_aarch64/Image
+          [ -f "$IMG" ] || IMG=$(find ~/gki -name Image -path "*kernel_aarch64*" -not -path "*/dist/*" | head -n1)
+          [ -f "$IMG" ] || { echo "::error::Image not found after build"; exit 1; }
+          KVER=$(strings "$IMG" | grep -m1 "Linux version 6")
+          echo "kernel: $KVER"
+          echo "$KVER" | grep -Eq "^Linux version 6\.6\.118.*droidspaces-lakitu" || { echo "::error::version drifted: $KVER"; exit 1; }
+
+          CFG=$GITHUB_WORKSPACE/.github/scripts/extract-ikconfig
+          chmod +x "$CFG"
+          "$CFG" "$IMG" > /tmp/built-config
+          grep -E "CONFIG_SYSVIPC=|CONFIG_POSIX_MQUEUE=|CONFIG_IPC_NS=|CONFIG_PID_NS=|CONFIG_DEVTMPFS=" /tmp/built-config
+          # LTO/CFI must equal stock environment (LTO_NONE=y + CFI_CLANG=y)
+          grep -q "^CONFIG_LTO_NONE=y$" /tmp/built-config || { echo "::error::LTO drifted from stock LTO_NONE - vendor_dlkm CRC mismatch risk"; exit 1; }
+          grep -q "^CONFIG_CFI_CLANG=y$" /tmp/built-config || { echo "::error::CFI drifted from stock"; exit 1; }
+          # WiFi/BT lifeline: protected-symbol gate must stay OFF (see defconfig step)
+          grep -q "^# CONFIG_MODULE_SIG_PROTECT is not set" /tmp/built-config || { echo "::error::MODULE_SIG_PROTECT must be off (system_dlkm protected-symbol refusal)"; exit 1; }
+          # trusty-rescue bake assertions (silent kconfig drop class, see 09-12 lesson)
+          grep -q "^CONFIG_TRUSTY_RESCUE=y$" /tmp/built-config || { echo "::error::TRUSTY_RESCUE not built in (Kconfig hook dropped?)"; exit 1; }
+          grep -q 'kvm-arm.mode=nvhe' /tmp/built-config || { echo "::error::CONFIG_CMDLINE missing kvm-arm.mode=nvhe (cmdline bake failed)"; exit 1; }
+          if grep -q 'kvm-arm.mode=protected' /tmp/built-config; then echo "::error::kvm-arm.mode=protected still in built config"; exit 1; fi
+          # OS4 symbol-gap fix: 13 stub tracehooks + LZ4_compress_default must be EXPORTED
+          # (__ksymtab_* entries). Gate here so a silently-dropped injection never reaches flashing.
+          # NOTE: this gate must never skip. bazel-bin does not always hold a vmlinux
+          # (run 40819039897 warned and skipped the whole check), so fall back to
+          # reconstructing an ELF from the Image itself via kallsyms - the same
+          # path local acceptance (verify-built-image.sh) uses.
+          VM=$(find ~/gki/bazel-bin -name vmlinux -path "*kernel_aarch64*" 2>/dev/null | head -n1)
+          if [ -z "$VM" ]; then
+            echo "vmlinux not in bazel-bin - reconstructing an ELF from the Image via kallsyms"
+            VM=/tmp/Image-vmlinux.elf
+            # venv first: runner python3 may be PEP-668 "externally managed"
+            if ! python3 -m venv /tmp/vte >/dev/null 2>&1; then
+              echo "::warning::python3 -m venv unavailable, installing into the system python"
+              python3 -m pip install --quiet --disable-pip-version-check --break-system-packages vmlinux-to-elf \
+                || { echo "::error::cannot install vmlinux-to-elf - OS4 export/KCFI verification would be skipped"; exit 1; }
+              VTE=vmlinux-to-elf
+            else
+              /tmp/vte/bin/pip install --quiet --disable-pip-version-check vmlinux-to-elf \
+                || { echo "::error::cannot install vmlinux-to-elf - OS4 export/KCFI verification would be skipped"; exit 1; }
+              VTE=/tmp/vte/bin/vmlinux-to-elf
+            fi
+            "$VTE" "$IMG" "$VM" >/dev/null 2>&1 \
+              || { echo "::error::vmlinux-to-elf failed on $IMG - cannot verify OS4 exports/KCFI"; exit 1; }
+            [ -s "$VM" ] || { echo "::error::reconstructed ELF is empty"; exit 1; }
+            echo "reconstructed $VM ($(stat -c%s "$VM") bytes)"
+          fi
+          # NO_LZ4_EXPORT=1 deliberately drops LZ4 (node_cache must fail to load),
+          # so it is required or forbidden depending on the switch.
+          HOOK_SYMS="__tracepoint_android_vh_remove_mapping __tracepoint_android_vh_remove_mapping_failed \
+                     __tracepoint_android_vh_filemap_get_folio_end __tracepoint_android_vh_put_super \
+                     __tracepoint_android_vh_fuse_request_end_ext __tracepoint_android_vh_fuse_request_fetch \
+                     __tracepoint_android_vh_mmap_lock_free __tracepoint_android_vh_mmap_lock_init \
+                     __tracepoint_android_vh_percpu_rwsem_init __tracepoint_android_vh_rcu_boost_end \
+                     __tracepoint_android_vh_rcu_boost_start __tracepoint_android_vh_sync_rcu_wait_end \
+                     __tracepoint_android_vh_sync_rcu_wait_start"
+          if [ "${OS4_HOOKS}" = "off" ]; then
+            # control build: every OS4 tracehook must be ABSENT (no header, no export)
+            for SYM in $HOOK_SYMS LZ4_compress_default; do
+              readelf -sW "$VM" | grep -q "__ksymtab_$SYM" \
+                && { echo "::error::OS4_HOOKS=off but $SYM is exported (hook series not skipped?)"; exit 1; }
+            done
+            echo "OS4_HOOKS=off: no OS4 tracehook / LZ4 exports, as intended"
+          else
+            REQUIRED="$HOOK_SYMS"
+            if [ "${NO_LZ4_EXPORT}" = "1" ]; then
+              readelf -sW "$VM" | grep -q "__ksymtab_LZ4_compress_default" \
+                && { echo "::error::NO_LZ4_EXPORT=1 but LZ4_compress_default is still exported"; exit 1; }
+              echo "NO_LZ4_EXPORT=1: LZ4_compress_default correctly absent from ksymtab"
+            else
+              REQUIRED="$REQUIRED LZ4_compress_default"
+            fi
+            for SYM in $REQUIRED; do
+              readelf -sW "$VM" | grep -q "__ksymtab_$SYM" || { echo "::error::export missing for $SYM (OS4 stub injection failed)"; exit 1; }
+            done
+            echo "OS4 symbol-gap fix verified: $(echo $REQUIRED | wc -w) symbols exported"
+          fi
+          # The probes are now actually CALLED (call sites patched), so the KCFI
+          # type hash embedded in each __traceiter_* must equal the one the stock
+          # modules carry at -4(%probe). A mismatch is a #brk panic on first hit,
+          # so gate here: the hash set is pinned by the stock kernel disassembly.
+          if [ "${OS4_HOOKS}" = "off" ]; then
+            echo "OS4_HOOKS=off: skipping the KCFI hash gate (no stub traceiters in this build)"
+          else
+            python3 "$GITHUB_WORKSPACE/.github/scripts/verify-os4-kcfi.py" "$VM" /tmp/built-config \
+              || { echo "::error::OS4 stub prototypes do not match stock KCFI hashes - refusing to flash"; exit 1; }
+          fi
+
+          if [ "${{ matrix.variant }}" = "ksu" ]; then
+            grep -q "^CONFIG_KSU=y$" /tmp/built-config || { echo "::error::KSU missing in ksu build"; exit 1; }
+            if echo ",${KSU_OPTS}," | grep -q ',no_kpm,'; then
+              grep -q "^# CONFIG_KPM is not set" /tmp/built-config || { echo "::error::KSU_OPTS no_kpm did not stick"; exit 1; }
+            else
+              grep -q "^CONFIG_KPM=y$" /tmp/built-config || { echo "::error::KPM missing in ksu build"; exit 1; }
+            fi
+            grep -q "^CONFIG_KSU_SUSFS=y$" /tmp/built-config || { echo "::error::SUSFS missing in ksu build (builtin branch not applied?)"; exit 1; }
+          else
+            grep -Eq "^CONFIG_KSU=(y|m)$" /tmp/built-config && { echo "::error::KSU must be off in bypass build"; exit 1; }
+            grep -Eq "^CONFIG_KPM=(y|m)$" /tmp/built-config && { echo "::error::KPM must be off in bypass build"; exit 1; }
+            echo "bypass: KSU/KPM confirmed off"
+          fi
+          mkdir -p /tmp/ak3-images
+          if [ "${{ matrix.variant }}" = "ksu" ]; then
+            cp -v "$IMG" /tmp/ak3-images/Image-ksu
+          else
+            cp -v "$IMG" /tmp/ak3-images/Image-bypass
+          fi
+
+      - name: KernelPatch 预补丁（KPM 使能，${{ matrix.variant }}）
+        if: matrix.variant == 'ksu' && env.KPM_PATCH == 'on'
+        run: |
+          set -e
+          # CONFIG_KPM=y 只编出「桥」：kernel/extension/kpm.c 把 KPM 能力位设成
+          #   sukisu_kpm_bridge(SUKISU_KPM_PROBE) == SUKISU_KPM_ABI_VERSION
+          # 而 bridge 拿魔法值去调 __arm64_sys_truncate（KernelPatch 复用 syscall 45），
+          # 没有 KP 就返回 -EOPNOTSUPP -> 管理器看到 caps=0 禁用 KPM，
+          # ksud kpm 一律 "os error 95"。2026-10-30 实测确认后改为在此打 KP 预补丁。
+          if echo ",${KSU_OPTS}," | grep -q ',no_kpm,'; then
+            echo "KSU_OPTS=no_kpm：没有 KPM 桥，跳过 KP 预补丁"
+            exit 0
+          fi
+          curl -fsSL --retry 3 -o /tmp/kpimg \
+            "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/${KPIMG_COMMIT}/kpm/kpimg"
+          ACT_SHA=$(sha256sum /tmp/kpimg | cut -d' ' -f1)
+          echo "kpimg sha256: $ACT_SHA"
+          [ "$ACT_SHA" = "$KPIMG_SHA256" ] || { echo "::error::kpimg 内容漂移（pin 的 commit 应字节稳定）"; exit 1; }
+          git clone -q --filter=blob:none https://github.com/bmax121/KernelPatch.git /tmp/kp
+          git -C /tmp/kp checkout -q "$KP_COMMIT"
+          cp /tmp/kp/kernel/include/preset.h /tmp/kp/tools/
+          ( cd /tmp/kp/tools && cmake -DCMAKE_BUILD_TYPE=Release . >/dev/null && make -j"$(nproc)" >/dev/null )
+          /tmp/kp/tools/kptools -v -k /tmp/kpimg | tee /tmp/kpimg.info
+          # superkey 每构建随机，且用 -S（只在镜像里存 hash，不存明文）；
+          # KPM 走 supercall syscall 通道，不需要这个 key。
+          SK=$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 32)
+          IMG=/tmp/ak3-images/Image-ksu
+          /tmp/kp/tools/kptools -p -i "$IMG" -k /tmp/kpimg -S "$SK" -o /tmp/Image-kp
+          /tmp/kp/tools/kptools -l -i /tmp/Image-kp | tee /tmp/Image-kp.info
+          grep -q 'patched=true' /tmp/Image-kp.info || { echo "::error::KP 预补丁没生效"; exit 1; }
+          grep -q "kernelpatch\|version=" /tmp/Image-kp.info || { echo "::error::KP 元信息缺失"; exit 1; }
+          ls -l "$IMG" /tmp/Image-kp
+          mv /tmp/Image-kp "$IMG"
+          echo "KP prepatch OK: $(stat -c%s "$IMG") bytes (raw), kpimg $(grep -m1 version= /tmp/Image-kp.info)"
+
+      - name: Prepare AnyKernel3 (${{ matrix.variant }})
+        run: |
+          set -e
+          mkdir -p /tmp/artifacts
+          # Base: Numbersf/AnyKernel3 - third-party community fork (upstream:
+          # Kernel-SU/AnyKernel3). NOT SukiSU-Ultra org staff (verified 2026-09-12:
+          # org has 4 members, Numbersf not among them; known for Action-Build).
+          # Uses the uppercase var convention (BLOCK/IS_SLOT_DEVICE/NO_MAGISK_CHECK)
+          # that the SukiSU app flasher expects. Lowercase osm0sis style was silently ignored by the
+          # app flasher ("flash failed, no details"). dash boot layout (GKI 3.0):
+          # HEADER_VER 4 / KERNEL_FMT lz4 / RAMDISK_SZ 0 -> boot carries ONLY the
+          # kernel; the generic ramdisk lives on init_boot, device ramdisk +
+          # vendor ramdisk on vendor_boot. AK3 flash_boot replaces the kernel
+          # payload only and repacks the (empty-ramdisk) boot image untouched.
+          # DRIFT GUARD #3 (2026-09-12 brick forensics): this template clone was the
+          # THIRD floating upstream. run #11 (2026-08-31, boots on dash) resolved it to
+          # 0fc75698 (2026-08-10); by 2026-09-10 HEAD had moved to 47f23f7ec "v31.0
+          # beta!" (2026-09-04) whose magiskboot (910,296 B vs 788,840 B) and
+          # magiskpolicy differ. That is the ONLY change shared by BOTH variants on
+          # 9/10 (KSU & SUSFS pins were byte-identical r14 vs r15; the bypass Image is
+          # byte-identical r11 vs r14 except the build-time module-key cert blob), and
+          # it is exactly the window the user reports: 8/31 build boots, 9/10 builds
+          # kernel-panic in BOTH ksu and bypass. Pin to the boot-verified commit; the
+          # v31 toolchain must not re-enter silently - upgrade only after a real-device
+          # flash test.
+          AK3_PIN=0fc7569866bb5d5fe51752cc410dca3e92ab332f
+          git clone -q https://github.com/Numbersf/AnyKernel3 /tmp/AnyKernel3-template
+          git -C /tmp/AnyKernel3-template checkout -q "$AK3_PIN"
+          echo "AK3 pinned $(git -C /tmp/AnyKernel3-template rev-parse --short HEAD)"
+          # Static guard: tool binaries must match the 8/31 boot-verified bytes
+          [ "$(stat -c%s /tmp/AnyKernel3-template/tools/magiskboot)" = "788840" ] \
+            || { echo "::error::AK3@$(git -C /tmp/AnyKernel3-template rev-parse --short HEAD) magiskboot size != 788840 (0fc75698 known-good)"; exit 1; }
+          [ "$(stat -c%s /tmp/AnyKernel3-template/tools/magiskpolicy)" = "356584" ] \
+            || { echo "::error::AK3 magiskpolicy size != 356584 (0fc75698 known-good)"; exit 1; }
+          cat > /tmp/ak3-anykernel.sh <<'AKSH'
+          ### AnyKernel3 Ramdisk Mod Script
+          ## dash GKI 6.6 by lakitu12 (template: Numbersf/AnyKernel3, SukiSU app-compatible)
+          ## osm0sis @ xda-developers
+
+          ### AnyKernel setup
+          # global properties
+          properties() { '
+          kernel.string=dash GKI 6.6.118-android15-8 DroidSpaces + SUSFS + SukiSU Ultra KPM by lakitu12
+          do.devicecheck=0
+          do.modules=0
+          do.systemless=0
+          do.cleanup=1
+          do.cleanuponabort=0
+          device.name1=dash
+          device.name2=turbo5max
+          supported.versions=
+          supported.patchlevels=
+          supported.vendorpatchlevels=
+          '; } # end properties
+
+          ### AnyKernel install
+          ## boot shell variables
+          BLOCK=boot
+          IS_SLOT_DEVICE=auto
+          RAMDISK_COMPRESSION=auto
+          PATCH_VBMETA_FLAG=auto
+          NO_MAGISK_CHECK=1
+
+          # import functions/variables and setup patching - see for reference (DO NOT REMOVE)
+          . tools/ak3-core.sh
+
+          sync
+          sleep 0.5
+          chmod -R 755 $AKHOME/tools
+
+          ui_print " Installing dash GKI 6.6.118 kernel (DroidSpaces + SukiSU Ultra)"
+          ui_print " Boot holds kernel only; init_boot / vendor_boot stay untouched"
+
+          split_boot
+          if [ -f "split_img/ramdisk.cpio" ]; then
+              unpack_ramdisk
+              write_boot
+          else
+              flash_boot
+          fi
+
+          ui_print " Done. Kernel swapped; init_boot and vendor_boot untouched."
+          AKSH
+          # Definitions-only builds must never be mistaken for the full series
+          # (2026-10-29: the full series bootlooped, so both get exercised).
+          SUFFIX=""
+          if [ "${OS4_HOOKS}" = "off" ]; then
+            SUFFIX="-NOHOOKS"
+          elif [ "${NO_LZ4_EXPORT}" = "1" ]; then
+            SUFFIX="-NOLZ4"
+          elif [ "${HOOK_CALL_SITES}" != "full" ]; then
+            SUFFIX="-SITES$(echo "${HOOK_CALL_SITES}" | tr -d ',')"
+          fi
+          case ",${KSU_OPTS}," in
+            *,no_susfs_feats,*) SUFFIX="${SUFFIX}-NOSUSFSFEAT";;
+            *,no_hide_syms,*)   SUFFIX="${SUFFIX}-NOHIDESYM";;
+            *,inert,*)          SUFFIX="${SUFFIX}-INERT";;
+            *,nohooks,*)        SUFFIX="${SUFFIX}-NOHOOKS";;
+          esac
+          if echo ",${KSU_OPTS}," | grep -q ',no_kpm,'; then SUFFIX="${SUFFIX}-NOKPM"; fi
+          # -KP = 该 Image 已打 KernelPatch 预补丁（KPM 真能用）；没打就别在名字里吹 KPM
+          if [ "${{ matrix.variant }}" = "ksu" ] && [ "${KPM_PATCH}" = "on" ] \
+             && ! echo ",${KSU_OPTS}," | grep -q ',no_kpm,'; then
+            SUFFIX="${SUFFIX}-KP"
+          fi
+          if [ "${{ matrix.variant }}" = "ksu" ]; then
+            IMG=/tmp/ak3-images/Image-ksu
+            OUT="AnyKernel3-dash-6.6.118-android15-DroidSpaces-SUSFS-SukiSU-KPM${SUFFIX}.zip"
+            RAW="Image-6.6.118-android15-8-droidspaces-lakitu-KSU-KPM${SUFFIX}"
+          else
+            IMG=/tmp/ak3-images/Image-bypass
+            OUT="AnyKernel3-dash-6.6.118-android15-DroidSpaces-BYPASS-noKSU${SUFFIX}.zip"
+            RAW="Image-6.6.118-android15-8-droidspaces-lakitu-BYPASS-noKSU${SUFFIX}"
+          fi
+          rm -rf /tmp/AnyKernel3
+          cp -r /tmp/AnyKernel3-template /tmp/AnyKernel3
+          rm -rf /tmp/AnyKernel3/.git /tmp/AnyKernel3/anykernel.sh
+          cp -v "$IMG" /tmp/AnyKernel3/Image
+          cp -v /tmp/ak3-anykernel.sh /tmp/AnyKernel3/anykernel.sh
+          chmod +x /tmp/AnyKernel3/tools/* /tmp/AnyKernel3/META-INF/com/google/android/update-binary
+          ( cd /tmp/AnyKernel3 && zip -r9 -q "/tmp/artifacts/$OUT" . )
+          cp -v "$IMG" "/tmp/artifacts/$RAW"
+          # 诊断用符号表：崩溃 PC 要靠它落成函数名（main 上可保留，代价 ~10MB）
+          SM=$(find ~/gki/bazel-bin -name System.map -path "*kernel_aarch64*" 2>/dev/null | head -n1)
+          if [ -n "$SM" ]; then
+            cp -v "$SM" "/tmp/artifacts/System.map-${{ matrix.variant }}"
+          else
+            echo "::warning::System.map not found in bazel-bin, crash PCs cannot be symbolized"
+          fi
+          echo "=== verify $OUT ==="
+          unzip -p "/tmp/artifacts/$OUT" anykernel.sh | grep -E "^BLOCK=boot" || { echo "::error::uppercase BLOCK missing"; exit 1; }
+          unzip -p "/tmp/artifacts/$OUT" anykernel.sh | grep -E "split_boot|write_boot" || { echo "::error::anykernel.sh missing install calls"; exit 1; }
+          unzip -p "/tmp/artifacts/$OUT" Image | strings | grep -m1 "droidspaces-lakitu" || { echo "::error::wrong Image packed"; exit 1; }
+          ls -lh /tmp/artifacts/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dash-6.6.118-android15-${{ matrix.variant }}
+          path: /tmp/artifacts/*
+          if-no-files-found: error
+          retention-days: 14

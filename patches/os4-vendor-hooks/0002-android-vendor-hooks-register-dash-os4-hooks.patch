@@ -1,0 +1,75 @@
+diff --git a/drivers/android/vendor_hooks.c b/drivers/android/vendor_hooks.c
+--- a/drivers/android/vendor_hooks.c
++++ b/drivers/android/vendor_hooks.c
+@@ -84,6 +84,7 @@
+ #include <trace/hooks/typec.h>
+ #include <trace/events/android_vendor_lmk.h>
+ #include <trace/hooks/swapfile.h>
++#include <trace/hooks/dash_os4_stub.h>
+ 
+ /*
+  * Export tracepoints that act as a bare tracehook (ie: have no trace event
+@@ -704,3 +705,16 @@
+ EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_fas_gpu_qos_update_tracer);
+ EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_loop_skip_queue_work);
+ EXPORT_TRACEPOINT_SYMBOL_GPL(android_rvh_gup_longterm_locked);
++
++/* dash OS4 vendor hooks: exported so stock vendor modules can probe them */
++EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_remove_mapping);
++EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_remove_mapping_failed);
++EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_filemap_get_folio_end);
++EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_put_super);
++EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_fuse_request_end_ext);
++EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_fuse_request_fetch);
++EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_percpu_rwsem_init);
++EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_rcu_boost_end);
++EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_rcu_boost_start);
++EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_sync_rcu_wait_end);
++EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_sync_rcu_wait_start);
+diff --git a/drivers/android/dash_os4_decl_exports.c b/drivers/android/dash_os4_decl_exports.c
+new file mode 100644
+--- /dev/null
++++ b/drivers/android/dash_os4_decl_exports.c
+@@ -0,0 +1,33 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * dash OS4 QoS tracehooks: export-only translation unit.
++ *
++ * The stock OS4 kernel exported android_vh_mmap_lock_init/_free from a unit that
++ * only *declared* the tracepoints (no CREATE_TRACE_POINTS). genksyms derives a
++ * tracepoint symbol's modversions CRC from the declaration text visible at the
++ * EXPORT site: the DEFINE_TRACE_FN definition carries
++ *
++ *     struct tracepoint __tracepoint_X __used __section("__tracepoints") = {...}
++ *
++ * and those attribute tokens change the CRC, while the bare
++ *
++ *     extern struct tracepoint __tracepoint_X;
++ *
++ * does not. os_cpu_qi.ko verifies the CRC at load time and rejects a mismatch
++ * ("disagrees about version of symbol ..." / -EINVAL), so these two exports
++ * must stay in a declaration-only unit to reproduce the stock CRCs:
++ *
++ *     __tracepoint_android_vh_mmap_lock_init  0x615d194b
++ *     __tracepoint_android_vh_mmap_lock_free  0xa301bcc9
++ *
++ * The tracepoint objects themselves are still defined in vendor_hooks.c via the
++ * CREATE_TRACE_POINTS pass; this unit only carries the EXPORT statements.
++ *
++ * Verified on-device 2026-10-29: with this layout os_cpu_qi.ko loads with no
++ * kcrctab post-processing (556 -> 584 modules, QoS chain comes up).
++ */
++#include <linux/tracepoint.h>
++#include <trace/hooks/dash_os4_stub.h>
++
++EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_mmap_lock_init);
++EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_mmap_lock_free);
+diff --git a/drivers/android/Makefile b/drivers/android/Makefile
+--- a/drivers/android/Makefile
++++ b/drivers/android/Makefile
+@@ -6,4 +6,5 @@
+ obj-$(CONFIG_ANDROID_BINDER_IPC_SELFTEST) += binder_alloc_selftest.o
+ obj-$(CONFIG_ANDROID_DEBUG_SYMBOLS)	+= android_debug_symbols.o
+ obj-$(CONFIG_ANDROID_VENDOR_HOOKS) += vendor_hooks.o
++obj-$(CONFIG_ANDROID_VENDOR_HOOKS) += dash_os4_decl_exports.o
+ obj-$(CONFIG_ANDROID_DEBUG_KINFO)	+= debug_kinfo.o
