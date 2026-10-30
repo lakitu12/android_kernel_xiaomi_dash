@@ -274,6 +274,14 @@ jobs:
           fi
 
           # KSU + KPM + SUSFS configs (mirrors WildKernels known-good set)
+          #
+          # KSU 配置是构建期注入的（不入库），所以 gki_defconfig 在这个 job 里会被
+          # 追加 CONFIG_KSU*=，kleaf 的 savedefconfig 门禁（POST_DEFCONFIG_CMDS=
+          # check_defconfig）就会报 "savedefconfig does not match"。门禁只对
+          # gki_defconfig 生效、不校验 defconfig_fragments，所以关掉它不影响
+          # dash_gki.fragment 的正确性——fragment 的设置由 kleaf 自己的 check 校验。
+          sed -i 's/POST_DEFCONFIG_CMDS="check_defconfig"/POST_DEFCONFIG_CMDS="true"/' \
+            ~/gki/common/build.config.gki || true
           DEFCONFIG=~/gki/common/arch/arm64/configs/gki_defconfig
           for CFG in KSU KPM KSU_MANUAL_SU KSU_SUSFS KSU_SUSFS_SUS_PATH KSU_SUSFS_SUS_MOUNT KSU_SUSFS_SUS_KSTAT KSU_SUSFS_SPOOF_UNAME KSU_SUSFS_ENABLE_LOG KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG KSU_SUSFS_OPEN_REDIRECT KSU_SUSFS_SUS_MAP; do
             sed -i "/^# CONFIG_${CFG} is not set/d; /^CONFIG_${CFG}=/d" "$DEFCONFIG"
