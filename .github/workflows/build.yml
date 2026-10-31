@@ -415,7 +415,12 @@ jobs:
                      __tracepoint_android_vh_percpu_rwsem_init __tracepoint_android_vh_rcu_boost_end \
                      __tracepoint_android_vh_rcu_boost_start __tracepoint_android_vh_sync_rcu_wait_end \
                      __tracepoint_android_vh_sync_rcu_wait_start"
-          REQUIRED="$HOOK_SYMS LZ4_compress_default"
+          # 这三个是「源码里本来就 EXPORT_*、但被 CONFIG_TRIM_UNUSED_KSYMS 裁掉」的一类：
+          # kernel/user.c 的 find_user/free_uid 被 mi_game.ko 用，os_cpu_qi.ko 还要
+          # android_vh_futex_wait_queue_start 这个 tracepoint。它们必须在 KMI 白名单里
+          # （android/abi_gki_aarch64_dash_os4），否则 trim 阶段整条 __ksymtab 被删掉。
+          TRIM_SYMS="find_user free_uid __tracepoint_android_vh_futex_wait_queue_start"
+          REQUIRED="$HOOK_SYMS LZ4_compress_default $TRIM_SYMS"
           for SYM in $REQUIRED; do
             readelf -sW "$VM" | grep -q "__ksymtab_$SYM" || { echo "::error::export missing for $SYM (OS4 stub injection failed)"; exit 1; }
           done
