@@ -87,12 +87,33 @@ builtin@b16e899a  同上 = 10
 | KSU | SUSFS | 结果 |
 |---|---|---|
 | `b59170724cdc` (2026-10-27) | `0606e19afae9` (2026-10-27) | ✅ 2026-10-31 实测：run 41182178821 构建并刷入 boot_b，跑通（583 模块 / unknown=0 / KSU 4.3.0 root） |
-| `b16e899a555e` (2026-10-29) | `93114563fd6b` (2026-10-29) | 本次升级候选，验证结果见下节 |
+| `b16e899a555e` (2026-10-29) | `93114563fd6b` (2026-10-29) | ✅ 2026-10-31 实测：run 41193522848 双变体绿；刷 boot_b 开机成功（583 模块 / unknown=0 / KSU root / SUSFS 生效） |
 
 > 注意：`b5917072` 之后上游把 `allowlist.c` 的 `fall through` 注释改成了
 > `#if LINUX_VERSION_CODE > KERNEL_VERSION(5,6,0) fallthrough; #else /* fall through */`，
 > 我们的 sed 重写仍在（对新 pin 无害），等确认新 pin 稳定后可以删掉这段 workaround。
 
-## 7. 本次升级的验证记录
+## 7. 本次升级的验证记录（2026-10-31）
 
-（CI run / 上机结果填在这里）
+| 项 | 值 |
+|---|---|
+| 提交 | `10bc77fa4` |
+| CI run | `41193522848`，ksu + bypass 都 success |
+| CI 打印的版本清单 | `KSU b16e899a555e (2026-10-30)` / `SUSFS 93114563fd6b (2026-10-29)` / `KSU_SUSFS Kconfig entries: 10` |
+| 配对门禁 | `KSU/SUSFS pairing OK: 17 ksu_*() refs, 32 susfs_*() calls` |
+| 离线门禁 | `missing: 0`、13 个 KCFI 哈希全 ok、版本串 `6.6.118-android15-8-droidspaces-lakitu-4k` |
+| 镜像 | `boot_10bc77fa4_ksu.img` sha256 `0ed8203539a02c6d…`，payload 17,557,916 B，AVB0 @0x10c0000 |
+| 上机 | 刷 boot_b → `sys.boot_completed=1`，回读 sha256 与镜像一致 |
+| 模块/符号 | 583 个模块、`Unknown symbol` = 0、node_cache/os_cpu_qi/mi_game 全 Live |
+| KSU | `su` → `uid=0 context=u:r:ksu:s0`，ksud 4.3.0 (uapi 6) |
+| SUSFS | dmesg 里 187 条 `KernelSU: susfs:` 记录（说明 SUSFS 代码在跑） |
+| 未动的分区 | gz_b 仍零态、vendor_boot_b `d7b8e676`、lk 两槽未变 |
+
+结论：这组 pin 可以开机并保持 KSU + SUSFS 全部功能，已替换上一组成为默认。
+
+## 8. 回滚命令
+
+```bash
+# 上一组已知可开机（b5917072 + 0606e19）的镜像还在：
+fastboot flash boot_b ~/下载/dash-os4/boot_185798583_ksu.img   # sha af4a1f01…
+```
