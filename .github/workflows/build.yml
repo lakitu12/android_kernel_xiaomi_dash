@@ -163,14 +163,22 @@ jobs:
           # identifier" after ~12 min of build. That breakage is fixed upstream now
           # (verified at the pin below: handler is defined again), and the x86-style
           # fail-fast just below still catches any regression in seconds.
-          # 2026-10-29: bumped from v4.1.3-6c5603f0 to the builtin tip b59170724cdc
-          # (2026-10-27). NOTE: the newest *release* v4.2.1-r2 = d6b36700f3bd is
-          # main-lineage and carries NO KSU_SUSFS Kconfig at all -> all 10 SUSFS
-          # defconfig entries would be silently dropped (the marble lesson).
-          # builtin@b5917072 has the 10 SUSFS symbols AND every ksu_* symbol the
-          # pinned susfs4ksu patch calls (signatures verified equal), so it is the
-          # SUSFS-capable equivalent of that release.
-          KSU_PIN=b59170724cdc
+          # VERSION FREEZE (2026-10-31). Policy: pin one exact commit per component,
+          # never a branch tip and never "latest source". See docs/version-pins.md.
+          #
+          # Why the pin is on `builtin` and not on a release tag: the release line
+          # (main) carries ZERO KSU_SUSFS Kconfig symbols - verified on v4.3.0
+          # (2026-10-29) with `grep -c KSU_SUSFS kernel/Kconfig` = 0, while
+          # builtin@b16e899a = 10. `builtin` publishes no tags/releases, so the
+          # closest thing to "the v4.3.0 release, with SUSFS" is the builtin tip
+          # from the same day.
+          #
+          # KSU b16e899a (2026-10-29 17:45Z, same day as release v4.3.0):
+          #   + 85d3b048 fix(kernel): align SELinux hide policy parsing (#3936)
+          #   + b16e899a fix 0b666cad breaks clang GKI builds (allowlist.c
+          #     fallthrough guarded by LINUX_VERSION_CODE) <- this one matters here
+          # Previous known-good pin was b59170724cdc (2026-10-27).
+          KSU_PIN=b16e899a555e
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s "$KSU_PIN"
           ls -l common/drivers/kernelsu
           # This build runs clang with -Werror,-Wimplicit-fallthrough, and clang
@@ -236,7 +244,12 @@ jobs:
           #     after ~9 min). c05208e "susfs: Add priority uid filter" introduces
           #     them; pin the branch tip, which also carries c05208e's follow-up
           #     UAF fix (0606e19).
-          SUSFS_PIN=0606e19afae93ffc88e53883dbf3cfced62a7b59
+          # SUSFS pin moves with the KSU pin (same window). 9311456 (2026-10-29
+          # "KernelSU: Fix compiler error") only touches
+          # kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch (main-lineage
+          # setup, unused here); the kernel-side files we copy and the 50_ patch
+          # are byte-identical to 0606e19 (2026-10-27, the previous pin).
+          SUSFS_PIN=93114563fd6b08092b9ce8c0309738c921ac8bd1
           git clone -q https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android15-6.6 /tmp/susfs4ksu
           git -C /tmp/susfs4ksu checkout -q "$SUSFS_PIN"
           # Fail-fast #2 (the full both-direction check runs right after the 50_
@@ -254,6 +267,21 @@ jobs:
           # compiler ~9-18 min later if either pin drifted.
           python3 "$GITHUB_WORKSPACE/.github/scripts/check-susfs-pair.py" \
             --tree . --ksu drivers/kernelsu --susfs-patch "$SFX"
+
+          # ---- version-freeze assertions (docs/version-pins.md) ----
+          # These are intentionally hard-coded: if someone bumps one pin without the
+          # other, or if setup.sh silently checks out something else, fail in seconds.
+          [ "$(git -C ../KernelSU rev-parse HEAD)" = "$(git -C ../KernelSU rev-parse "$KSU_PIN")" ] \
+            || { echo "::error::KSU checkout != KSU_PIN $KSU_PIN"; exit 1; }
+          [ "$(git -C /tmp/susfs4ksu rev-parse HEAD)" = "$SUSFS_PIN" ] \
+            || { echo "::error::SUSFS checkout != SUSFS_PIN $SUSFS_PIN"; exit 1; }
+          KSU_SUSFS_CFG=$(grep -c '^config KSU_SUSFS' "$KSU_DIR/Kconfig")
+          [ "$KSU_SUSFS_CFG" = "10" ] \
+            || { echo "::error::KSU tree exposes $KSU_SUSFS_CFG KSU_SUSFS Kconfig entries, want 10 (pin drifted to a release/main commit?)"; exit 1; }
+          echo "--- pinned versions ---"
+          echo "  KSU    $KSU_PIN ($(git -C ../KernelSU log -1 --format=%cd --date=short))"
+          echo "  SUSFS  $SUSFS_PIN  $(grep -m1 'SUSFS_VERSION' include/linux/susfs.h | cut -d'\"' -f2) ($(git -C /tmp/susfs4ksu log -1 --format=%cd --date=short))"
+          echo "  KSU_SUSFS Kconfig entries: $KSU_SUSFS_CFG"
 
           # KSU_OPTS=nohooks：把 SUSFS 的「当前进程是否标记 no_su」判定钉成 true，
           # 于是所有 SUSFS 源码级 hook（fs/exec.c、fs/namei.c 等）都走原版路径。
