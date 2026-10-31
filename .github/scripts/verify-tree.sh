@@ -70,7 +70,14 @@ done
 
 [ -f "$TREE/android/abi_gki_aarch64_dash_os4" ] || fail "android/abi_gki_aarch64_dash_os4 (KMI whitelist) missing"
 grep -q 'abi_gki_aarch64_dash_os4' "$TREE/BUILD.bazel" || fail "KMI whitelist not wired into BUILD.bazel"
-grep -q '^  LZ4_compress_default$' "$TREE/android/abi_gki_aarch64_dash_os4" || fail "LZ4_compress_default not whitelisted"
+KMI="$TREE/android/abi_gki_aarch64_dash_os4"
+# 白名单就是 CONFIG_TRIM_UNUSED_KSYMS 的 keep 表：漏一条，镜像里就没有这条导出。
+for sym in LZ4_compress_default find_user free_uid; do
+  grep -q "^  ${sym}\$" "$KMI" || fail "$sym not whitelisted (TRIM would drop its export)"
+done
+# 13 个 hook 的 __tracepoint_* + 最后一个 futex 的 tracepoint，外加对应的 __traceiter_*
+grep -q '^  __tracepoint_android_vh_futex_wait_queue_start$' "$KMI" \
+  || fail "android_vh_futex_wait_queue_start not whitelisted (os_cpu_qi.ko would fail to load)"
 
 # ------------------------------------------------ DroidSpaces: kABI padding + configs
 # SYSVIPC 会改 task_struct 布局，所以字段挪进了 ANDROID_KABI_RESERVE(6..8)，
@@ -93,6 +100,6 @@ grep -q 'pid_max_max = PID_MAX_DEFAULT' "$TREE/kernel/pid.c" \
 echo "in-tree dash delta verified:"
 echo "  trusty-rescue      driver + Kconfig/Makefile hook + nvhe cmdline + CONFIG_TRUSTY_RESCUE=y"
 echo "  DroidSpaces        SYSVIPC kABI padding in sched.h + dash_gki.fragment (SYSVIPC/IPC_NS/PID_NS/DEVTMPFS/..., MODULE_SIG_PROTECT off), gki_defconfig untouched"
-echo "  os4-vendor-hooks   13 tracehooks declared/exported/called, KMI list wired (13 + LZ4)"
+echo "  os4-vendor-hooks   13 tracehooks declared/exported/called, KMI list wired (13 hooks + LZ4 + find_user/free_uid/futex)"
 echo "  pid-max-clamp      pid space clamped to 32768"
 echo "  (binary gates still to run after the build: CONFIG checks, __ksymtab_*, KCFI hashes)"
