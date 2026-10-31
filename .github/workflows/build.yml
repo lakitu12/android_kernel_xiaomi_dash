@@ -275,7 +275,9 @@ jobs:
             || { echo "::error::KSU checkout != KSU_PIN $KSU_PIN"; exit 1; }
           [ "$(git -C /tmp/susfs4ksu rev-parse HEAD)" = "$SUSFS_PIN" ] \
             || { echo "::error::SUSFS checkout != SUSFS_PIN $SUSFS_PIN"; exit 1; }
-          KSU_SUSFS_CFG=$(grep -c '^config KSU_SUSFS' "$KSU_DIR/Kconfig")
+          # cwd is common/ here (the symlink was created in ~/gki), so use the
+          # tree-relative path; grep -c exits 1 on zero matches -> || true.
+          KSU_SUSFS_CFG=$(grep -c '^config KSU_SUSFS' drivers/kernelsu/Kconfig || true)
           [ "$KSU_SUSFS_CFG" = "10" ] \
             || { echo "::error::KSU tree exposes $KSU_SUSFS_CFG KSU_SUSFS Kconfig entries, want 10 (pin drifted to a release/main commit?)"; exit 1; }
           echo "--- pinned versions ---"
