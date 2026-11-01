@@ -15,7 +15,7 @@
 ## kABI padding
 
 `sysv_sem` / `sysv_shm` 挪进 `ANDROID_KABI_RESERVE(6..8)`，于是开 `CONFIG_SYSVIPC` 也不改
-`task_struct` 布局，stock 编的 vendor 模块照旧能加载。做法与 marble 一致。
+`task_struct` 布局，stock 编的 vendor 模块照旧能加载。
 
 ## OS4 vendor hook（13 个）
 
