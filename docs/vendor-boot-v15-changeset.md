@@ -1,10 +1,10 @@
 # v15 vendor_boot 具体修改的字节级说明
 
-对象：`~/hermes_work/vendor_boot_a_nogz_patched_v15_devapc_on.img`
+对象：v15 版 vendor_boot 镜像（`vendor_boot_a_nogz_patched_v15_devapc_on.img`）
 md5 `449da7a8221bc220532d70b8c4b9620c` / sha256 `6093b684…c8d4`
-基线：原厂 `~/下载/vendor_boot_a.img`
+基线：原厂 `vendor_boot_a.img`
 
-## 0. 先说验证方法与两个易误导的现象
+## 0. 验证方法与两个易误导的现象
 
 对原厂与 v15 做过三重取证：全文件逐字节 diff、两版 vendor_ramdisk 解包后
 cpio **逐文件 md5 对比**、header 字段结构解析。结论与现象：
@@ -49,7 +49,7 @@ NULLs sram_header) -> add x0,x0,#0"，实际指令为 b.eq，v8→v9→v10→v11
 产物文件 `v8_log_store_patched.ko`/`v9_log_store.ko`（md5 `b6d90b1c…`）。
 注：`patch_vendorboot.py`（更早一轮实验，打在 `0x1be4` 的另一条
 `str xzr,[x19]`→NOP，产物 md5 `1b83ddc7…`）**没有**进入 v12→v15 线上链，
-本文档旧版误把它写成了现行补丁，已按 cpio 实物证据更正。
+旧版曾把它写成现行补丁，实际没有进入线上链，以 cpio 实物为准。
 
 ### 2b. 伪装性字符串微调：`0x207d`（同文件，rodata）
 ```
@@ -106,4 +106,4 @@ stock(2e755ef8) ─v8: log_store NOP@0xb88(+Address 配平) + cmdline nogzpatch=
 v15 的 §1/§2/§3 三处改动在 **gz 在位态同样存在且实测无害**（8 月 lakitu-1
 基线的同款改动带 gz 正常开过机）；理论上 gz 恢复后 §2/§3 属"冗余但安全"。
 未验项（DRM 受保护流退化、nogzpatch/dapcdt 可删性、三件套回滚矩阵）见
-`gz-erased-changeset.md` §7 与本节记录，动手前勿当已证事实引用。
+`gz-erased-changeset.md` 与本节的记录，动手前不要当已证事实引用。

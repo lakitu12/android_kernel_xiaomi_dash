@@ -1,8 +1,6 @@
 # 基底合并：小米 dash-w-oss (6.6.89) + ACK 6.6.118
 
-本文记录 `main` 分支根目录那棵内核树是怎么来的、18 个冲突逐条怎么取舍、
-本地怎么重做与验证。目的：下一次 MTK 更新 `dash-w-oss` 或 AOSP 出新月度 tag 时，
-照这个流程重跑一遍即可，不用重新推演。
+`main` 分支根目录那棵内核树的来历、18 个冲突的取舍、重做与验证方式。
 
 ## 为什么是这个基底
 
@@ -132,6 +130,5 @@ make O=out ARCH=arm64 LLVM=1 olddefconfig
 make O=out ARCH=arm64 LLVM=1 -j$(nproc) Image
 ```
 
-2026-10-30 实测：合并后的树 + 全部 14 条补丁，`Image` 编过（30 MB），
-`trusty_rescue_init`、13 个 `__traceiter_android_vh_*` 都在符号表里，
-版本串 `6.6.118-...`。
+合并后的树加上树内 delta，`Image` 可以编过；`trusty_rescue_init` 和 13 个
+`__traceiter_android_vh_*` 都在符号表里，版本串 `6.6.118-...`。

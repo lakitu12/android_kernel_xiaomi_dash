@@ -1,6 +1,6 @@
 # dash (Redmi Turbo 5 Max / MT6991Z) — gz-erased 双态系统修改清单
 
-状态截至 2026-10-03，全部条目均有实测锚点；分区指纹为当次 dd 校验。
+状态截至 2026-10-03，分区指纹为当次 dd 校验。
 
 ## 0. 设备当前分区状态
 
@@ -71,7 +71,7 @@ v15（devapc 撤销回原厂，判别实验定案 devapc 无罪）。v15 净差�
 | 2 | DTB strings 块 | Mali 节点属性名 `protected-memory-allocator`→`protected-memory-allocatoX`（等长改名） | 关 kbase protected-memory 路径：gz 擦除时 `mtee_assign_buffer_v2` SMC 返 -22 → mali prot alloc NULL deref ipanic | **是，且长期是**。DT 级闸门，graphicsengine 加载 CSF 固件即触发，与救援无关 |
 | 3 | vendor_boot header `cmdline` 字段 | 追加 `nogzpatch=1 dapcdt=1` | v12 遗留开关，消费者未逐一定位（疑 vendor 侧） | **存疑保留**——相机链已由内核救援解决，理论上可能可删；未做删除回归前不动 |
 
-镜像文件：`~/hermes_work/vendor_boot_a_nogz_patched_v15_devapc_on.img`
+镜像文件：`vendor_boot_a_nogz_patched_v15_devapc_on.img`
 （md5 `449da7a8…`，sha256 `6093b684…`，元数据 `v15_meta.json`）。
 字节级细节（实际偏移/指令/取证方法）见同目录 `vendor-boot-v15-changeset.md`
 ——该文档以 cpio 逐文件 md5 对比与 header 结构解析为准，修正了早期
@@ -96,7 +96,7 @@ gz↔EL2 互换               → 只动 gz_a 分区              （fastboot fl
 gz_a + 原厂 vendor_boot + 原厂 boot（v15 的三处改动理论上也兼容 gz 在位态，
 Mali 闸门最多使受保护视频通路退化，未实测，标注为待验）。
 
-## 4. 未验项（诚实清单）
+## 4. 未验证项
 
 - gz 恢复 + 新内核 + v15 组合的开机回归（预期：rescue 静默、KVM 报 not
   available、其余如原厂）——未实测。
