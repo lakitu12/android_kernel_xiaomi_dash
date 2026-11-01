@@ -80,8 +80,8 @@ builtin 流程不消费它；我们复制的内核侧文件与 50_ patch 与 `06
 
 3. 改 workflow 的 `KSU_PIN` / `SUSFS_PIN` 和本文表格，推上去看 CI；
 4. CI 绿之后必须上机验证开机，这是唯一能证明「不是又一个无法开机的组合」的手段：
-   `prep-kernel.sh <run-id>` → `flash-ksu-b.sh <img>` → `postboot-check.sh`，确认
-   `unknown symbol = 0`、`/data/adb/ksu` 存在、`su` 可用；
+   从 CI 下载 `Image`，用 magiskboot 配上原 boot 的 ramdisk 重打，刷到 `boot_b`；
+   开机后确认 `unknown symbol` 计数为 0、`/data/adb/ksu` 存在、`su` 可用；
 5. 失败就回滚到上一组已知可开机的 pin（`b5917072` + `0606e19`）再排查。
 
 ## 已知可开机的组合

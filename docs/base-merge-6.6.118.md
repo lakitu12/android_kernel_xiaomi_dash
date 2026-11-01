@@ -16,7 +16,7 @@
 ## 流程（可重跑）
 
 ```bash
-export WORK=~/staging/dash-sync && mkdir -p $WORK && cd $WORK
+export WORK=/tmp/dash-sync && mkdir -p $WORK && cd $WORK
 
 # 1) 三份原料
 curl -L -o xiaomi.tar.gz https://codeload.github.com/MiCode/Xiaomi_Kernel_OpenSource/tar.gz/refs/heads/dash-w-oss

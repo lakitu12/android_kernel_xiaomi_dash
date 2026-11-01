@@ -44,18 +44,15 @@ v15   : 00 00 00 91   add x0, x0, #0         ; 即 nop
 `b.eq` 跳入的处理路径会拿 NULL `sram_header` 继续往下走 → 早期实测
 （boot 时代 ramoops）表现为 panic；NOP 后失败分支被吞掉，模块照常工作
 （console-ramoops 导出功能不受影响，实测可拉）。
-来源脚本：`repack_v8.py`（注释原文 "b.ne 0xbd8 (first SRAM-magic check ->
-NULLs sram_header) -> add x0,x0,#0"，实际指令为 b.eq，v8→v9→v10→v11→v12 沿用），
-产物文件 `v8_log_store_patched.ko`/`v9_log_store.ko`（md5 `b6d90b1c…`）。
-注：`patch_vendorboot.py`（更早一轮实验，打在 `0x1be4` 的另一条
-`str xzr,[x19]`→NOP，产物 md5 `1b83ddc7…`）**没有**进入 v12→v15 线上链，
-旧版曾把它写成现行补丁，实际没有进入线上链，以 cpio 实物为准。
+这条 NOP 从 v8 起一路沿用到 v12，产物是打过补丁的 `log_store.ko`
+（md5 `b6d90b1c…`）。更早一轮实验打在 `0x1be4` 的另一条 `str xzr,[x19]`→NOP
+（产物 md5 `1b83ddc7…`），没有进入 v12→v15 线上链，以 cpio 实物为准。
 
 ### 2b. 伪装性字符串微调：`0x207d`（同文件，rodata）
 ```
 "  log_store: sram header address 0x%p."  → "  … header Address 0x%p."
 ```
-（a→A，1 字节）。这是 repack_v9/v10 的压缩尺寸配平手法：重压缩流的输出字节数
+（a→A，1 字节）。这是 v9/v10 的压缩尺寸配平手法：重压缩流的输出字节数
 受内容熵微扰影响，加一个无害大写让被改块压回与原厂**完全相同**的压缩长度，
 从而不动 header、不挪后续任何偏移。属于工程手段，无运行时语义。
 
@@ -69,15 +66,15 @@ NULLs sram_header) -> add x0,x0,#0"，实际指令为 b.eq，v8→v9→v10→v11
   属性名变未知 → kbase `of_parse_phandle` 查不到 → 不走 protected memory 分配 →
   绕开 gz 擦除态 `mtee_assign_buffer_v2` SMC 返 -22 后 NULL deref 的 ipanic
   （v13 时代崩溃签名）。
-- 唯一性保障：构建脚本（`build_v14_mali.py`）断言 strings 块全局命中恰 1 处、
-  不与 `arm,protected-memory-allocator` 前缀混淆、struct 块节点名不动；
-  产物 v14 与 v12 全文件差异恰 1 字节。**内核管不到，长期必须保留**。
+- 唯一性保障：改的时候断言 strings 块全局命中恰 1 处、不与
+  `arm,protected-memory-allocator` 前缀混淆、struct 块节点名不动；产物 v14 与 v12
+  全文件差异恰 1 字节。**内核管不到，长期必须保留**。
 
 ## 4. DTB：devapc compatible（v12 改过 → v15 回滚，净效果为零）
 
 - v12 曾把 strings 块 `mediatek,mt6991-devapc` → `mediatek,skip69-devapc`
   （等长改名跳过 AP devapc 驱动，当时用于相机问题隔离）。
-- v15（`build_v15_devapc_on.py`）回滚：6 字节写回 `mt6991-`（文件偏移
+- v15 回滚：6 字节写回 `mt6991-`（文件偏移
   `0x3b15521–0x3b15526`，v15 与 v14 全文件差异恰此 6 字节）。
 - 判别实验结论：devapc 恢复后相机症状不变（`driver registered` 日志实证）→
   无罪保留原厂值。当前镜像此项**与原厂一致**。
@@ -88,8 +85,8 @@ NULLs sram_header) -> add x0,x0,#0"，实际指令为 b.eq，v8→v9→v10→v11
 stock(2e755ef8) ─v8: log_store NOP@0xb88(+Address 配平) + cmdline nogzpatch=1
               ─v9/v10/v11: 沿用，试验 kvmnvhe/nodapc 变体
               ─v12: DTB devapc→skip69，cmdline 定稿 "nogzpatch=1 dapcdt=1"
-              ─v14: DTB Mali 改名 (build_v14_mali.py)
-              ─v15: DTB devapc 还原 (build_v15_devapc_on.py)   ← 现行
+              ─v14: DTB Mali 改名
+              ─v15: DTB devapc 还原   ← 现行
 ```
 自校验惯例：每版脚本"写后回读 + 与上一版逐字节 diff 断言差异恰 N 字节"。
 

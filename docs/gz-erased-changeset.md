@@ -71,16 +71,13 @@ v15（devapc 撤销回原厂，判别实验定案 devapc 无罪）。v15 净差�
 | 2 | DTB strings 块 | Mali 节点属性名 `protected-memory-allocator`→`protected-memory-allocatoX`（等长改名） | 关 kbase protected-memory 路径：gz 擦除时 `mtee_assign_buffer_v2` SMC 返 -22 → mali prot alloc NULL deref ipanic | **是，且长期是**。DT 级闸门，graphicsengine 加载 CSF 固件即触发，与救援无关 |
 | 3 | vendor_boot header `cmdline` 字段 | 追加 `nogzpatch=1 dapcdt=1` | v12 遗留开关，消费者未逐一定位（疑 vendor 侧） | **存疑保留**——相机链已由内核救援解决，理论上可能可删；未做删除回归前不动 |
 
-镜像文件：`vendor_boot_a_nogz_patched_v15_devapc_on.img`
-（md5 `449da7a8…`，sha256 `6093b684…`，元数据 `v15_meta.json`）。
-字节级细节（实际偏移/指令/取证方法）见同目录 `vendor-boot-v15-changeset.md`
-——该文档以 cpio 逐文件 md5 对比与 header 结构解析为准，修正了早期
-"log_store NOP 在 0x1be4"的旧记录（实际线上链打的是 0xb88）。
-构建脚本（等长 DTB/ko 手术范式，防 magiskboot v31 repack 破坏 AVB image_size 的
-历史坑，一律手写二进制编辑）：`build_v14_mali.py`、`build_v15_devapc_on.py`、
-`repack_v8/v10/v11/v12.py`、`patch_vendorboot.py`（未上线的早期变体，产物
-`1b83ddc7` 系 ko 不在 v15 内）、`build_nvhe_safe.py`（boot 侧字节手术——已被
-§1.1 取代，退役）。
+字节级细节（实际偏移、指令、取证方法）见同目录
+[vendor-boot-v15-changeset.md](vendor-boot-v15-changeset.md)：那份以 cpio 逐文件 md5
+对比与 header 结构解析为准。
+
+这些改动都是等长二进制编辑，不做整块重打包——magiskboot v31 的 repack 会改动
+AVB 的 `image_size`，历史上有过教训。改法是按上表的文件偏移直接改字节，改完回读，
+再与上一版做全文件 diff，断言差异恰为预期字节数。
 
 ## 3. 分层职责速查
 
