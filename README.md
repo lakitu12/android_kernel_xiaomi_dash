@@ -94,11 +94,12 @@ SMC 握手失败，`/trusty/trusty-virtio` 不生成，secure-cmdq mailbox 一�
 
 **DroidSpaces 的配置缺口**：stock 缺 SYSVIPC、POSIX_MQUEUE、IPC_NS、PID_NS、DEVTMPFS、
 USER_NS、TMPFS_XATTR/POSIX_ACL、NETFILTER_XT_MATCH_ADDRTYPE、IP_SET，以及 7.1 检查项里的
-macvlan、IPv6 NAT（NAT66）和 pids controller，全部由 `dash_gki.fragment` 补齐；UTS_NS、
-OVERLAY_FS、SECCOMP、VETH、CGROUP_FREEZER、MEMCG stock 已有，swap limit 随 MEMCG 自动可用。
-`CONFIG_CFS_BANDWIDTH` 没开：它给 `struct cfs_rq`（进而 `struct rq`）加字段，所有收
-`struct rq *` 的导出符号都会换 CRC，MTK 预编译的 sched/QoS 模块会拒载，所以 `--cpus`
-保持不可用。
+macvlan 和 IPv6 NAT（NAT66），由 `dash_gki.fragment` 补齐；UTS_NS、OVERLAY_FS、SECCOMP、
+VETH、CGROUP_FREEZER、MEMCG stock 已有，swap limit 随 MEMCG 自动可用。
+`CONFIG_CFS_BANDWIDTH` 和 `CONFIG_CGROUP_PIDS` 没开：前者给 `struct cfs_rq`（进而
+`struct rq`）加字段，后者改变 `struct css_set::subsys[]` 的数组大小（`CGROUP_SUBSYS_COUNT`），
+两者都会让 `rq` / `task_struct` 相关的导出符号换 genksyms CRC，MTK 预编译的 sched/QoS 模块
+会拒载；`--cpus` 和 `--pids-limit` 因此不可用。
 
 ## 来源
 

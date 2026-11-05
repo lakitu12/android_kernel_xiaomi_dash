@@ -86,15 +86,18 @@ grep -q 'ANDROID_KABI_USE(6, struct sysv_sem sysvsem)' "$TREE/include/linux/sche
   || fail "DroidSpaces SYSVIPC kABI padding missing from include/linux/sched.h"
 for sym in SYSVIPC POSIX_MQUEUE IPC_NS PID_NS DEVTMPFS USER_NS \
            TMPFS_XATTR TMPFS_POSIX_ACL NETFILTER_XT_MATCH_ADDRTYPE IP_SET \
-           NETFILTER_XT_SET CGROUP_PIDS MACVLAN IP6_NF_NAT \
+           NETFILTER_XT_SET MACVLAN IP6_NF_NAT \
            IP6_NF_TARGET_MASQUERADE KPROBES KALLSYMS KALLSYMS_ALL; do
   grep -q "^CONFIG_${sym}=y$" "$FRAG" || fail "dash_gki.fragment lost CONFIG_${sym}=y"
 done
-# CPU bandwidth provisioning resizes struct cfs_rq -> struct rq and rewrites the
-# CRC of every exported symbol taking struct rq *; MTK's prebuilt sched modules
-# then refuse to load. Keep it out of the fragment (see the fragment comment).
+# CPU bandwidth provisioning resizes struct cfs_rq -> struct rq, and the pids
+# controller resizes struct css_set::subsys[] -> task_struct; either one rewrites
+# genksyms CRCs that MTK's prebuilt sched modules were built against. Both stay
+# out of the fragment (see the fragment comment for the measured numbers).
 grep -q '^CONFIG_CFS_BANDWIDTH=y$' "$FRAG" \
   && fail "CONFIG_CFS_BANDWIDTH must stay off (struct rq CRC / vendor module refusal)"
+grep -q '^CONFIG_CGROUP_PIDS=y$' "$FRAG" \
+  && fail "CONFIG_CGROUP_PIDS must stay off (css_set array size / task_struct CRC)"
 grep -q '^# CONFIG_MODULE_SIG_PROTECT is not set$' "$FRAG" \
   || fail "MODULE_SIG_PROTECT must stay off (system_dlkm protected-symbol refusal)"
 # ------------------------------------------------ pid clamp
@@ -105,7 +108,7 @@ grep -q 'pid_max_max = PID_MAX_DEFAULT' "$TREE/kernel/pid.c" \
 
 echo "in-tree dash delta verified:"
 echo "  trusty-rescue      driver + Kconfig/Makefile hook + nvhe cmdline + CONFIG_TRUSTY_RESCUE=y"
-echo "  DroidSpaces        SYSVIPC kABI padding in sched.h + dash_gki.fragment (SYSVIPC/IPC_NS/PID_NS/DEVTMPFS/MACVLAN/NAT66/CGROUP_PIDS/..., MODULE_SIG_PROTECT off, CFS_BANDWIDTH off), gki_defconfig untouched"
+echo "  DroidSpaces        SYSVIPC kABI padding in sched.h + dash_gki.fragment (SYSVIPC/IPC_NS/PID_NS/DEVTMPFS/MACVLAN/NAT66/..., MODULE_SIG_PROTECT off, CFS_BANDWIDTH/CGROUP_PIDS off), gki_defconfig untouched"
 echo "  os4-vendor-hooks   13 tracehooks declared/exported/called, KMI list wired (13 hooks + LZ4 + find_user/free_uid/futex)"
 echo "  pid-max-clamp      pid space clamped to 32768"
 echo "  (binary gates still to run after the build: CONFIG checks, __ksymtab_*, KCFI hashes)"

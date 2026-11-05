@@ -399,14 +399,17 @@ jobs:
           chmod +x "$CFG"
           "$CFG" "$IMG" > /tmp/built-config
           grep -E "CONFIG_SYSVIPC=|CONFIG_POSIX_MQUEUE=|CONFIG_IPC_NS=|CONFIG_PID_NS=|CONFIG_DEVTMPFS=" /tmp/built-config
-          # DroidSpaces 7.1 check rows: macvlan / NAT66 / pids controller must be
-          # in the built kernel, and CFS_BANDWIDTH must NOT be (struct rq CRC).
-          for s in MACVLAN IP6_NF_NAT IP6_NF_TARGET_MASQUERADE CGROUP_PIDS; do
+          # DroidSpaces 7.1 check rows: macvlan / NAT66 must be in the built
+          # kernel; CFS_BANDWIDTH and CGROUP_PIDS must NOT be (struct rq and
+          # css_set array CRCs that the prebuilt vendor modules were built on).
+          for s in MACVLAN IP6_NF_NAT IP6_NF_TARGET_MASQUERADE; do
             grep -q "^CONFIG_${s}=y$" /tmp/built-config \
               || { echo "::error::dash_gki.fragment lost CONFIG_${s}=y"; exit 1; }
           done
-          grep -q "^# CONFIG_CFS_BANDWIDTH is not set$" /tmp/built-config \
-            || { echo "::error::CFS_BANDWIDTH must stay off (struct rq CRC / vendor module refusal)"; exit 1; }
+          for s in CFS_BANDWIDTH CGROUP_PIDS; do
+            grep -q "^# CONFIG_${s} is not set$" /tmp/built-config \
+              || { echo "::error::${s} must stay off (genksyms CRC / vendor module refusal)"; exit 1; }
+          done
           # LTO/CFI must equal stock environment (LTO_NONE=y + CFI_CLANG=y)
           grep -q "^CONFIG_LTO_NONE=y$" /tmp/built-config || { echo "::error::LTO drifted from stock LTO_NONE - vendor_dlkm CRC mismatch risk"; exit 1; }
           grep -q "^CONFIG_CFI_CLANG=y$" /tmp/built-config || { echo "::error::CFI drifted from stock"; exit 1; }

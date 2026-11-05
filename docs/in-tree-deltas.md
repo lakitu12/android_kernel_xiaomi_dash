@@ -20,14 +20,17 @@
 ## DroidSpaces 7.1 的检查项
 
 7.1 的 `droidspaces check` 新增 macvlan、IPv6 NAT、swap/CPU/进程限制五项探测。fragment 补齐
-`MACVLAN`、`IP6_NF_NAT`、`IP6_NF_TARGET_MASQUERADE`、`CGROUP_PIDS`；swap limit 在 6.6 上随
-`MEMCG` 自动可用（5.8 起 memcg swap accounting 并入 MEMCG，`memory.swap.max` 直接存在）。
+`MACVLAN`、`IP6_NF_NAT`、`IP6_NF_TARGET_MASQUERADE`；swap limit 在 6.6 上随 `MEMCG` 自动可用
+（5.8 起 memcg swap accounting 并入 MEMCG，`memory.swap.max` 直接存在）。
 
-`CFS_BANDWIDTH` 故意不开：它给 `struct cfs_rq` 加字段，而 `struct rq` 内嵌 cfs_rq，于是每个以
-`struct rq *` 为参数的导出符号都会换 genksyms CRC，stock 编的 sched/QoS 模块（vip_sched、
-mi_game、cpq）会以 `disagrees about version of symbol` 拒载。Droidspaces 的 GKI 文档在 5.15
-上量到约 4000 个导出符号变化，并说明没有 padding 补丁能覆盖这种结构变化。这条只有源码结构
-与上游文档两级证据，没有在 dash 上做 A/B；`--cpus` 因此保持不可用。
+`CFS_BANDWIDTH` 和 `CGROUP_PIDS` 故意不开。前者给 `struct cfs_rq` 加字段，而 `struct rq` 内嵌
+cfs_rq；后者改变 `CGROUP_SUBSYS_COUNT`，即 `struct css_set::subsys[]` 的数组大小，而
+task_struct 经指针可达 css_set。两者都会让 rq/task_struct 相关的 genksyms CRC 变化。在本树用
+clang 22 对 `kernel/sched/core.o` 做单变量对比：任一选项单独打开，都会改变该对象 123 个导出
+符号里的 57 个（runqueues、root_task_group、activate_task、resched_curr、全部
+`__traceiter_sched_*`）。Droidspaces 的 GKI 文档也把这两项列为不可开。MTK 预编译的 sched/QoS
+模块（vip_sched、mi_game、cpq）会以 `disagrees about version of symbol` 拒载，所以 `--cpus`
+与 `--pids-limit` 保持不可用。证据等级：本地单对象实测 + 上游文档，尚未在 dash 上做刷机 A/B。
 
 ## OS4 vendor hook（13 个）
 
