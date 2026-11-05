@@ -51,7 +51,7 @@ CI 在 push 到 `main` 或手动 `Run workflow` 时跑，矩阵两个变体：
 - `ksu`：SukiSU builtin + SUSFS + KernelPatch 预补丁
 - `bypass`：同一棵树，KSU 关掉
 
-产物是 `Image` 和 AnyKernel3 zip，版本串 `6.6.118-android15-8-droidspaces-lakitu`。
+产物是 `Image` 和 AnyKernel3 zip，版本串 `6.6.118-android15-8-lakitu`。
 
 CI 的构建方式：`repo sync` 只拉 `build/kernel`、prebuilts、`kernel/configs`，`kernel/common`
 用 local_manifest 摘掉，再把本仓 checkout 拷成 `common/` 交给 kleaf。不要改回跟踪
@@ -84,7 +84,7 @@ KPM 可用。
 
 **版本串靠改 kleaf 的 `stamp.bzl`**。`.scmversion` 在 6.x 已不再被读取，kleaf 无 stamp
 构建时会输出字面量 `-maybe-dirty`；workflow 直接把该文件里的这段改成
-`-droidspaces-lakitu`（KMI 尾巴 `-android15-8` 也由同一个文件携带）。不要用
+`-lakitu`（KMI 尾巴 `-android15-8` 也由同一个文件携带）。不要用
 `CONFIG_LOCALVERSION`，它会拼在文件内容之后。
 
 **擦 gz 之后必须有 trusty-rescue**。gz 被抹除给内核 EL2 跑 pKVM 时，`gz_trusty_mod` 的
@@ -93,9 +93,12 @@ SMC 握手失败，`/trusty/trusty-virtio` 不生成，secure-cmdq mailbox 一�
 `CONFIG_CMDLINE` 的 `kvm-arm.mode=protected` 改成 `nvhe`。
 
 **DroidSpaces 的配置缺口**：stock 缺 SYSVIPC、POSIX_MQUEUE、IPC_NS、PID_NS、DEVTMPFS、
-USER_NS、TMPFS_XATTR/POSIX_ACL、NETFILTER_XT_MATCH_ADDRTYPE、IP_SET，全部由
-`dash_gki.fragment` 补齐；UTS_NS、OVERLAY_FS、SECCOMP、VETH、CGROUP_FREEZER、MEMCG
-stock 已有。
+USER_NS、TMPFS_XATTR/POSIX_ACL、NETFILTER_XT_MATCH_ADDRTYPE、IP_SET，以及 7.1 检查项里的
+macvlan、IPv6 NAT（NAT66）和 pids controller，全部由 `dash_gki.fragment` 补齐；UTS_NS、
+OVERLAY_FS、SECCOMP、VETH、CGROUP_FREEZER、MEMCG stock 已有，swap limit 随 MEMCG 自动可用。
+`CONFIG_CFS_BANDWIDTH` 没开：它给 `struct cfs_rq`（进而 `struct rq`）加字段，所有收
+`struct rq *` 的导出符号都会换 CRC，MTK 预编译的 sched/QoS 模块会拒载，所以 `--cpus`
+保持不可用。
 
 ## 来源
 

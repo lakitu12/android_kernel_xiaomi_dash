@@ -35,6 +35,29 @@ CONFIG_IP_SET_HASH_IP=y
 CONFIG_IP_SET_HASH_NET=y
 CONFIG_NETFILTER_XT_SET=y
 
+# --- DroidSpaces 7.1 features (droidspaces check OPTIONAL rows) --------------
+#
+# 7.1 added five probes: macvlan, IPv6 NAT, swap limit, CPU limit and process
+# limit. Swap limit needs no config on 6.6: memcg swap accounting has been part
+# of CONFIG_MEMCG since 5.8, so memory.swap.max exists as soon as MEMCG is on.
+#
+# Macvlan and NAT66 are new subsystems, no exported type changes: Droidspaces
+# measured CONFIG_MACVLAN as kABI-safe on 5.15 (none of the 8423 exported
+# symbols changed), and IP6_NF_* only adds the ip6 nat table.
+#
+# CONFIG_CFS_BANDWIDTH is deliberately left off. It adds fields to struct
+# cfs_rq and therefore to struct rq, which changes the genksyms CRC of every
+# exported function taking struct rq * (update_rq_clock, task_rq_lock, ...).
+# Droidspaces' own GKI notes measure ~4000 exported symbols flipping on 5.15
+# and call it unpatchable; MTK's prebuilt sched/QoS modules (vip_sched,
+# mi_game, cpq) would be refused at load. --cpus therefore stays unavailable,
+# while --pids-limit works: CONFIG_CGROUP_PIDS only adds a cgroup subsystem and
+# touches no exported structure.
+CONFIG_CGROUP_PIDS=y
+CONFIG_MACVLAN=y
+CONFIG_IP6_NF_NAT=y
+CONFIG_IP6_NF_TARGET_MASQUERADE=y
+
 # --- SukiSU Ultra / KPM ------------------------------------------------------
 CONFIG_KPROBES=y
 CONFIG_KALLSYMS=y

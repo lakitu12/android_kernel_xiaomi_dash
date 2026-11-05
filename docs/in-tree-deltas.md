@@ -17,6 +17,18 @@
 `sysv_sem` / `sysv_shm` 挪进 `ANDROID_KABI_RESERVE(6..8)`，于是开 `CONFIG_SYSVIPC` 也不改
 `task_struct` 布局，stock 编的 vendor 模块照旧能加载。
 
+## DroidSpaces 7.1 的检查项
+
+7.1 的 `droidspaces check` 新增 macvlan、IPv6 NAT、swap/CPU/进程限制五项探测。fragment 补齐
+`MACVLAN`、`IP6_NF_NAT`、`IP6_NF_TARGET_MASQUERADE`、`CGROUP_PIDS`；swap limit 在 6.6 上随
+`MEMCG` 自动可用（5.8 起 memcg swap accounting 并入 MEMCG，`memory.swap.max` 直接存在）。
+
+`CFS_BANDWIDTH` 故意不开：它给 `struct cfs_rq` 加字段，而 `struct rq` 内嵌 cfs_rq，于是每个以
+`struct rq *` 为参数的导出符号都会换 genksyms CRC，stock 编的 sched/QoS 模块（vip_sched、
+mi_game、cpq）会以 `disagrees about version of symbol` 拒载。Droidspaces 的 GKI 文档在 5.15
+上量到约 4000 个导出符号变化，并说明没有 padding 补丁能覆盖这种结构变化。这条只有源码结构
+与上游文档两级证据，没有在 dash 上做 A/B；`--cpus` 因此保持不可用。
+
 ## OS4 vendor hook（13 个）
 
 dash OS4 的 `node_cache.ko` 要 4 个 `android_vh_*` tracepoint，`os_cpu_qi.ko` 要 9 个，

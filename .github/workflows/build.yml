@@ -110,15 +110,15 @@ jobs:
           # CONFIG_LOCALVERSION (it would be appended AFTER the file content).
           # OBSERVED (run 33304453206) file content = "-android15-8-maybe-dirty"
           # (KMI tail comes from the same file) -> after patch:
-          #   6.6.118-android15-8-droidspaces-lakitu
+          #   6.6.118-android15-8-lakitu
           # Patch kleaf no-stamp version source: build/kleaf/impl/stamp.bzl emits
           # literal "-maybe-dirty" when --config=stamp is absent; replace with our
           # suffix (this file ALSO carries the -android15-8 KMI tail).
           STAMP_BZL=~/gki/build/kleaf/impl/stamp.bzl
           [ -f "$STAMP_BZL" ] || STAMP_BZL=$(find ~/gki/build -name stamp.bzl -path "*kleaf*" 2>/dev/null | head -n1)
           [ -f "$STAMP_BZL" ] || { echo "::error::kleaf stamp.bzl not found"; exit 1; }
-          sed -i "s/echo '-maybe-dirty'/echo '-droidspaces-lakitu'/" "$STAMP_BZL"
-          grep -n "droidspaces-lakitu\|maybe-dirty" "$STAMP_BZL" || true
+          sed -i "s/echo '-maybe-dirty'/echo '-lakitu'/" "$STAMP_BZL"
+          grep -n "lakitu\|maybe-dirty" "$STAMP_BZL" || true
 
       # 我方的内核 delta（DroidSpaces kABI + 13 个 OS4 vendor hook + trusty-rescue
       # + pid 钳制，配置在 arch/arm64/configs/dash_gki.fragment）已经作为提交烘进树里，
@@ -373,7 +373,7 @@ jobs:
             # placeholder into the version string; the KMI tail "-android15-8"
             # is still injected by the build-config chain (BRANCH/KMI_GENERATION
             # env). OBSERVED (run 33304453206):
-            #   6.6.118-android15-8-maybe-dirty-droidspaces-lakitu
+            #   6.6.118-android15-8-maybe-dirty-lakitu
             # Cosmetic only: MODVERSIONS same_magic() skips the first vermagic
             # token; vendor module matching is by CRC/flags, not this string.
             tools/bazel build \
@@ -393,12 +393,20 @@ jobs:
           [ -f "$IMG" ] || { echo "::error::Image not found after build"; exit 1; }
           KVER=$(strings "$IMG" | grep -m1 "Linux version 6")
           echo "kernel: $KVER"
-          echo "$KVER" | grep -Eq "^Linux version 6\.6\.118.*droidspaces-lakitu" || { echo "::error::version drifted: $KVER"; exit 1; }
+          echo "$KVER" | grep -Eq "^Linux version 6\.6\.118.*-lakitu" || { echo "::error::version drifted: $KVER"; exit 1; }
 
           CFG=$GITHUB_WORKSPACE/.github/scripts/extract-ikconfig
           chmod +x "$CFG"
           "$CFG" "$IMG" > /tmp/built-config
           grep -E "CONFIG_SYSVIPC=|CONFIG_POSIX_MQUEUE=|CONFIG_IPC_NS=|CONFIG_PID_NS=|CONFIG_DEVTMPFS=" /tmp/built-config
+          # DroidSpaces 7.1 check rows: macvlan / NAT66 / pids controller must be
+          # in the built kernel, and CFS_BANDWIDTH must NOT be (struct rq CRC).
+          for s in MACVLAN IP6_NF_NAT IP6_NF_TARGET_MASQUERADE CGROUP_PIDS; do
+            grep -q "^CONFIG_${s}=y$" /tmp/built-config \
+              || { echo "::error::dash_gki.fragment lost CONFIG_${s}=y"; exit 1; }
+          done
+          grep -q "^# CONFIG_CFS_BANDWIDTH is not set$" /tmp/built-config \
+            || { echo "::error::CFS_BANDWIDTH must stay off (struct rq CRC / vendor module refusal)"; exit 1; }
           # LTO/CFI must equal stock environment (LTO_NONE=y + CFI_CLANG=y)
           grep -q "^CONFIG_LTO_NONE=y$" /tmp/built-config || { echo "::error::LTO drifted from stock LTO_NONE - vendor_dlkm CRC mismatch risk"; exit 1; }
           grep -q "^CONFIG_CFI_CLANG=y$" /tmp/built-config || { echo "::error::CFI drifted from stock"; exit 1; }
@@ -613,11 +621,11 @@ jobs:
           if [ "${{ matrix.variant }}" = "ksu" ]; then
             IMG=/tmp/ak3-images/Image-ksu
             OUT="AnyKernel3-dash-6.6.118-android15-DroidSpaces-SUSFS-SukiSU-KPM${SUFFIX}.zip"
-            RAW="Image-6.6.118-android15-8-droidspaces-lakitu-KSU-KPM${SUFFIX}"
+            RAW="Image-6.6.118-android15-8-lakitu-KSU-KPM${SUFFIX}"
           else
             IMG=/tmp/ak3-images/Image-bypass
             OUT="AnyKernel3-dash-6.6.118-android15-DroidSpaces-BYPASS-noKSU${SUFFIX}.zip"
-            RAW="Image-6.6.118-android15-8-droidspaces-lakitu-BYPASS-noKSU${SUFFIX}"
+            RAW="Image-6.6.118-android15-8-lakitu-BYPASS-noKSU${SUFFIX}"
           fi
           rm -rf /tmp/AnyKernel3
           cp -r /tmp/AnyKernel3-template /tmp/AnyKernel3
@@ -637,7 +645,7 @@ jobs:
           echo "=== verify $OUT ==="
           unzip -p "/tmp/artifacts/$OUT" anykernel.sh | grep -E "^BLOCK=boot" || { echo "::error::uppercase BLOCK missing"; exit 1; }
           unzip -p "/tmp/artifacts/$OUT" anykernel.sh | grep -E "split_boot|write_boot" || { echo "::error::anykernel.sh missing install calls"; exit 1; }
-          unzip -p "/tmp/artifacts/$OUT" Image | strings | grep -m1 "droidspaces-lakitu" || { echo "::error::wrong Image packed"; exit 1; }
+          unzip -p "/tmp/artifacts/$OUT" Image | strings | grep -m1 "android15-8-lakitu" || { echo "::error::wrong Image packed"; exit 1; }
           ls -lh /tmp/artifacts/
 
       - name: Upload artifacts
