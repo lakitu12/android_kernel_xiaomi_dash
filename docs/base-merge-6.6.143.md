@@ -128,12 +128,34 @@ ACK 2026-10 把这两个 config 补进了 `init/Kconfig.gki`，于是 `VENDOR_SI
 
 ## 验证
 
-- `bash .github/scripts/verify-tree.sh .` 通过；
-- 全树无冲突 marker；
-- plain make（clang 22）+ `gki_defconfig` + `dash_gki.fragment` 编出 `Image`（6.6.143-4k）；
-- 上面那轮 ABI 对比：118 与 143 用同一套配置各编一次，对比 16424 个共有导出符号；
-- 13 个 OS4 hook 的 KCFI 哈希用 `verify-os4-kcfi.py` 核过，全部与 stock 一致（改用 ACK
-  的定义后仍然对得上，因为 KCFI 只认类型、不认参数名）。
+CI run 44008064045 的 **bypass 变体通过**（ksu 变体倒在无关的上游改名上，见下），
+产物 `Image-6.6.143-android15-8-lakitu-BYPASS-noKSU` 做了独立的离线验收：
 
-还没做的：CI（kleaf）构建、KMI missing=0 / KCFI 哈希 / 版本串的二进制门禁、上机启动与
-模块加载数。
+| 项 | 结果 |
+|---|---|
+| 版本串 | `6.6.143-android15-8-lakitu-4k` |
+| KMI 符号缺口（3652 个模块必需符号） | **missing: 0** |
+| `__ksymtab` 导出条目 | 9360 |
+| 13 个 OS4 hook 的 KCFI 哈希 | 全对（`verify-os4-kcfi.py`） |
+| 内核导出符号 CRC vs 638 个 stock 模块的 `__versions` | **3653 个一致，0 个不符** |
+
+CRC 那一项的办法：`vmlinux-to-elf` 还原的 ELF 里没有 `__crc_*`（LOCAL 符号，kallsyms
+不带），但 `__start/__stop___ksymtab{,_gpl}` 和 `__start___kcrctab{,_gpl}` 这些边界符号
+还在，而两个数组是按索引平行的——按 `kernel_symbol` 的 `name_offset`（prel32，12 字节
+一条）取名字，同索引去 `__kcrctab` 取 CRC 即可。模块依赖的 6815 个符号里有 3162 个
+是模块之间互相导出（如 `mmc_mtk_biolog_*`、`mrdump_set_extra_dump`），不在内核导出集里，
+属正常。
+
+这也顺带证伪了本地 plain make 读数带来的担心：本地编出的 CRC 只有 896/6815 与 stock
+相符，而 CI 的 kleaf 产物是 3653/3653（内核导出的那部分）全中。差异纯粹来自配置不同
+（`SYSVIPC` 等会改 `task_struct` 相关符号），不是 6.6.143 的锅。
+
+## 与内核无关的一次失败
+
+run 44008064045 的 ksu 变体在 `KernelPatch 预补丁` 步骤失败，与本次升级无关：上游把
+`ShirkNeko/SukiSU_patch` 迁到了 `SukiSU-Nova/SukiSU_patch`，GitHub 的网页和 git 协议会
+重定向，但 `raw.githubusercontent.com` 不重定向，pin 的 kpimg URL 直接 404。
+
+换名前后核过内容：新路径的 kpimg sha256 仍是 `14fc6564…`（与 `KPIMG_SHA256` 一致），
+`setup.sh` 与旧路径同哈希。`SukiSU-Ultra/SukiSU-Ultra` 也一起迁到了 `SukiSU-Nova/`，
+一并改了。
