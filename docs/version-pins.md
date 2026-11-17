@@ -9,7 +9,7 @@
 | SukiSU Ultra | `builtin` 分支 `b16e899a555e`（UAPI 6） | CI `KSU_PIN` |
 | SUSFS | `susfs4ksu` `gki-android15-6.6` @ `93114563fd6b` | CI `SUSFS_PIN` |
 | KernelPatch | `bmax121/KernelPatch` @ `d4c88d667268` | CI `KP_PIN` |
-| kpimg | `ShirkNeko/SukiSU_patch` @ `eec45788c9a1` | CI `KPIMG_PIN` / `KPIMG_SHA256` |
+| kpimg | `SukiSU-Nova/SukiSU_patch` @ `eec45788c9a1` | CI `KPIMG_COMMIT` / `KPIMG_SHA256` |
 | AnyKernel3 | `Numbersf/AnyKernel3` | CI `AK3_PIN` |
 
 ## 为什么不用 release tag
@@ -67,7 +67,7 @@ builtin 流程不消费它；我们复制的内核侧文件与 50_ patch 与 `06
 2. 本地先跑静态门禁（可以脱离内核树）：
 
    ```bash
-   git clone --depth 1 -b builtin https://github.com/SukiSU-Ultra/SukiSU-Ultra.git /tmp/ksu
+   git clone --depth 1 -b builtin https://github.com/SukiSU-Nova/SukiSU-Nova.git /tmp/ksu
    git clone --depth 25 -b gki-android15-6.6 https://gitlab.com/simonpunk/susfs4ksu.git /tmp/susfs
    mkdir -p /tmp/t/{drivers,fs,include/linux}
    cp -r /tmp/ksu/kernel /tmp/t/drivers/kernelsu

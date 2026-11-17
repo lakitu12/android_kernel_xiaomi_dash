@@ -110,10 +110,10 @@ VETH、CGROUP_FREEZER、MEMCG stock 已有，swap limit 随 MEMCG 自动可用�
 - 基底（vendor）：<https://github.com/MiCode/Xiaomi_Kernel_OpenSource>（`dash-w-oss`）
 - 基底（upstream）：<https://android.googlesource.com/kernel/common>（`android15-6.6-2026-10_r3`）
 - DroidSpaces：<https://github.com/ravindu644/Droidspaces-OSS>
-- SukiSU Ultra：<https://github.com/SukiSU-Ultra/SukiSU-Ultra>（`builtin` 分支）
+- SukiSU Ultra：<https://github.com/SukiSU-Nova/SukiSU-Nova>（`builtin` 分支；原名 SukiSU-Ultra）
 - SUSFS：<https://gitlab.com/simonpunk/susfs4ksu>（`gki-android15-6.6`）
 - KernelPatch：<https://github.com/bmax121/KernelPatch>
-- kpimg：<https://github.com/ShirkNeko/SukiSU_patch>
+- kpimg：<https://github.com/SukiSU-Nova/SukiSU_patch>
 - AnyKernel3 模板：<https://github.com/Numbersf/AnyKernel3>
 - 基底合并过程：[docs/base-merge-6.6.118.md](docs/base-merge-6.6.118.md)、[docs/base-merge-6.6.143.md](docs/base-merge-6.6.143.md)
 - 树内 delta 的来历：[docs/in-tree-deltas.md](docs/in-tree-deltas.md)

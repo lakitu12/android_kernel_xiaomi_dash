@@ -179,7 +179,9 @@ jobs:
           #     fallthrough guarded by LINUX_VERSION_CODE) <- this one matters here
           # Previous known-good pin was b59170724cdc (2026-10-27).
           KSU_PIN=b16e899a555e
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU-Ultra/main/kernel/setup.sh" | bash -s "$KSU_PIN"
+          # 上游 2026-11 把仓库从 ShirkNeko/ 与 SukiSU-Ultra/ 迁到 SukiSU-Nova/ 组织；
+          # 旧名对 raw.githubusercontent.com 不再可靠（kpimg 实测 404，run 44008064045）。
+          curl -LSs "https://raw.githubusercontent.com/SukiSU-Nova/SukiSU-Nova/main/kernel/setup.sh" | bash -s "$KSU_PIN"
           ls -l common/drivers/kernelsu
           # This build runs clang with -Werror,-Wimplicit-fallthrough, and clang
           # does not accept the legacy "/* fall through */" comment in C mode -
@@ -503,7 +505,7 @@ jobs:
             exit 0
           fi
           curl -fsSL --retry 3 -o /tmp/kpimg \
-            "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/${KPIMG_COMMIT}/kpm/kpimg"
+            "https://raw.githubusercontent.com/SukiSU-Nova/SukiSU_patch/${KPIMG_COMMIT}/kpm/kpimg"
           ACT_SHA=$(sha256sum /tmp/kpimg | cut -d' ' -f1)
           echo "kpimg sha256: $ACT_SHA"
           [ "$ACT_SHA" = "$KPIMG_SHA256" ] || { echo "::error::kpimg 内容漂移（pin 的 commit 应字节稳定）"; exit 1; }
