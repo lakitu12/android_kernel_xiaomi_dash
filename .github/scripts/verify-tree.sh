@@ -71,10 +71,19 @@ for h in android_vh_mmap_lock_init android_vh_mmap_lock_free; do
   grep -q "EXPORT_TRACEPOINT_SYMBOL_GPL($h);" \
       "$TREE/drivers/android/dash_os4_decl_exports.c" \
     || fail "$h must be exported from dash_os4_decl_exports.c"
-  grep -q "EXPORT_TRACEPOINT_SYMBOL_GPL($h);" \
-      "$TREE/drivers/android/vendor_hooks.c" \
-    && fail "$h must NOT be exported from vendor_hooks.c (CRC mismatch / duplicate export)"
+  # vendor_hooks.c 与 kernel/sched/vendor_hooks.c 都是 CREATE_TRACE_POINTS 的 TU，
+  # 从那里导出会算出 stock 之外的 CRC（os_cpu_qi.ko 拒载）。
+  # kernel/sched/vendor_hooks.c 的两条是 ACK 2026-10 自己加的，我们删掉了。
+  for t in drivers/android/vendor_hooks.c kernel/sched/vendor_hooks.c; do
+    grep -q "EXPORT_TRACEPOINT_SYMBOL_GPL($h);" "$TREE/$t" \
+      && fail "$h must NOT be exported from $t (CREATE_TRACE_POINTS TU -> stock CRC mismatch)"
+  done
 done
+# 同一个 hook 只能在一个 TU 里导出一次（ACK + 小米树都加过的符号会出现两条）
+dup=$(grep -h '^EXPORT_TRACEPOINT_SYMBOL_GPL(' "$TREE/drivers/android/vendor_hooks.c" \
+        "$TREE/drivers/android/dash_os4_decl_exports.c" \
+      | sort | uniq -d)
+[ -z "$dup" ] || fail "duplicate EXPORT_TRACEPOINT_SYMBOL_GPL in drivers/android: $dup"
 
 [ -f "$TREE/android/abi_gki_aarch64_dash_os4" ] || fail "android/abi_gki_aarch64_dash_os4 (KMI whitelist) missing"
 grep -q 'abi_gki_aarch64_dash_os4' "$TREE/BUILD.bazel" || fail "KMI whitelist not wired into BUILD.bazel"
