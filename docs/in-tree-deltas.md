@@ -34,13 +34,15 @@ clang 22 对 `kernel/sched/core.o` 做单变量对比：任一选项单独打开
 
 ## OS4 vendor hook（13 个）
 
-dash OS4 的 `node_cache.ko` 要 4 个 `android_vh_*` tracepoint，`os_cpu_qi.ko` 要 9 个，
-AOSP GKI 6.6 里没有这些定义。
+dash OS4 的 `node_cache.ko` 要 4 个 `android_vh_*` tracepoint，`os_cpu_qi.ko` 要 9 个。
+ACK `android15-6.6-2026-10_r3` 起已经把这 13 个全收进树（`vmscan.h`、`mm.h`、`fs.h`、
+`fuse.h`、`sched.h`、`dtask.h`、`rcu.h`），`TP_PROTO` 与 stock Image 的 KCFI 哈希一致，
+所以本地不再有 `dash_os4_stub.h`，`vendor_hooks.c` 也不再有那 11 条 export。
 
 `TP_PROTO` 不能改。`CONFIG_CFI_CLANG=y` 下 `__traceiter_*` 会核对探针类型哈希，与原厂不一致
-会在 hook 第一次触发时 `brk #0x8228`。现有原型是用 `clang -fsanitize=kcfi` 复算、与 stock
-内核的立即数逐位对齐得到的；调用点位置由 stock Image 反汇编里每一条 `bl __traceiter_*`
-定位。构建后 `.github/scripts/verify-os4-kcfi.py` 再核对一次哈希。
+会在 hook 第一次触发时 `brk #0x8228`。构建后 `.github/scripts/verify-os4-kcfi.py` 再核对
+一次哈希。调用点以 stock Image 反汇编为准（例如 `rcu_boost_end` 在 `rt_mutex_unlock` 之前、
+`fuse_request_fetch` 在 `spin_unlock` 之后），`verify-tree.sh` 断言每个 hook 都还有调用点。
 
 ## trusty-rescue
 
@@ -78,11 +80,11 @@ genksyms 对 `__tracepoint_X` 的 CRC 取自 EXPORT 语句所见的声明文本�
 export 全塞在 `drivers/android/vendor_hooks.c`（该 TU 有 `CREATE_TRACE_POINTS`），所以只有
 这两个的 CRC 变了。
 
-修法是照抄 stock 的布局：新增 `drivers/android/dash_os4_decl_exports.c`，只
-`#include <linux/tracepoint.h>` + stub 头 + 两条 `EXPORT_TRACEPOINT_SYMBOL_GPL`，把这两个
-export 从 `vendor_hooks.c` 移过去。`__tracepoint_*` 对象仍由 `vendor_hooks.c` 的
-`CREATE_TRACE_POINTS` 定义。这样编出来的 Image 里两个 CRC 是 `0x615d194b` / `0xa301bcc9`，
-`os_cpu_qi.ko` 直接加载。
+修法是照抄 stock 的布局：`drivers/android/dash_os4_decl_exports.c` 只
+`#include <linux/tracepoint.h>` + `<trace/hooks/sched.h>` + 两条
+`EXPORT_TRACEPOINT_SYMBOL_GPL`，这两个 export 不走 `vendor_hooks.c`。`__tracepoint_*`
+对象仍由 `vendor_hooks.c` 的 `CREATE_TRACE_POINTS` 定义。这样编出来的 Image 里两个 CRC 是
+`0x615d194b` / `0xa301bcc9`，`os_cpu_qi.ko` 直接加载。
 
 `.github/scripts/patch-kcrctab.py` 保留为诊断工具（CI 不再调用）：先全量 diff kcrctab 定位
 符号，再用它临时钉值验证是不是这个 CRC 的问题。

@@ -1,4 +1,4 @@
-name: Build dash GKI 6.6.118-android15-8 - DroidSpaces + SukiSU Ultra (KPM + SUSFS)
+name: Build dash GKI 6.6.143 - DroidSpaces + SukiSU Ultra (KPM + SUSFS)
 
 on:
   workflow_dispatch:
@@ -66,14 +66,14 @@ jobs:
           cd ~/gki
           # The kernel SOURCE lives in this repo (kernel/): Xiaomi dash-w-oss
           # (MTK t-alps-release-v0.mp1.rc-V13.94, Linux 6.6.89) three-way merged
-          # with ACK android15-6.6-2026-01_r1 => Linux 6.6.118, the release dash
-          # stock (6.6.118-android15-8-gc44b714366cc-abogki519650608-4k) is built
-          # from. NEVER go back to tracking branch HEAD common-android15-6.6 -
+          # with ACK android15-6.6-2026-10_r3 => Linux 6.6.143. The device stock
+          # kernel is still 6.6.118 (6.6.118-android15-8-gc44b714366cc-abogki519650608-4k),
+          # which is what the vendor modules were built against. NEVER go back to tracking branch HEAD common-android15-6.6 -
           # it drifts and vermagic/CRC drift vs vendor modules = bootloop.
           # Only the build infra (build/kernel + prebuilts + kernel/configs) is
           # still synced; kernel/common is removed from the manifest and replaced
           # by a symlink to the checkout, so the build never sees an AOSP tree.
-          repo init -u https://android.googlesource.com/kernel/manifest -b common-android15-6.6-2026-01 --depth=1
+          repo init -u https://android.googlesource.com/kernel/manifest -b common-android15-6.6-2026-10 --depth=1
           mkdir -p .repo/local_manifests
           cat > .repo/local_manifests/dash-no-common.xml <<'LM'
           <manifest>
@@ -90,10 +90,10 @@ jobs:
           echo "=== build infra synced, common = copy of the in-repo tree ==="
           du -sh ~/gki ~/gki/build ~/gki/prebuilts
           KD=common
-          # Fail fast if the in-repo tree is not 6.6.118 (GNU Makefile 'SUBLEVEL = 118')
+          # Fail fast if the in-repo tree is not 6.6.143 (GNU Makefile 'SUBLEVEL = 143')
           SUB=$(grep -E "^[[:space:]]*SUBLEVEL" "$KD/Makefile" | head -n1)
           echo "Makefile: $(head -n5 "$KD/Makefile" | tr '\n' ' ') | $SUB"
-          echo "$SUB" | grep -Eq "SUBLEVEL[[:space:]]*=[[:space:]]*118" || { echo "::error::in-repo kernel is not 6.6.118 (got: $SUB)"; exit 1; }
+          echo "$SUB" | grep -Eq "SUBLEVEL[[:space:]]*=[[:space:]]*143" || { echo "::error::in-repo kernel is not 6.6.143 (got: $SUB)"; exit 1; }
           # Vendor-faithfulness gate: these only exist in the Xiaomi/MTK tree.
           # If they are gone the merge lost the vendor base and we are silently
           # building plain AOSP again (the exact failure mode this repo exists to
@@ -110,10 +110,10 @@ jobs:
           # CONFIG_LOCALVERSION (it would be appended AFTER the file content).
           # OBSERVED (run 33304453206) file content = "-android15-8-maybe-dirty"
           # (KMI tail comes from the same file) -> after patch:
-          #   6.6.118-android15-8-lakitu
+          #   6.6.143-android15-<kmi>-lakitu
           # Patch kleaf no-stamp version source: build/kleaf/impl/stamp.bzl emits
           # literal "-maybe-dirty" when --config=stamp is absent; replace with our
-          # suffix (this file ALSO carries the -android15-8 KMI tail).
+          # suffix (this file ALSO carries the KMI tail from the manifest branch).
           STAMP_BZL=~/gki/build/kleaf/impl/stamp.bzl
           [ -f "$STAMP_BZL" ] || STAMP_BZL=$(find ~/gki/build -name stamp.bzl -path "*kleaf*" 2>/dev/null | head -n1)
           [ -f "$STAMP_BZL" ] || { echo "::error::kleaf stamp.bzl not found"; exit 1; }
@@ -373,7 +373,7 @@ jobs:
             # placeholder into the version string; the KMI tail "-android15-8"
             # is still injected by the build-config chain (BRANCH/KMI_GENERATION
             # env). OBSERVED (run 33304453206):
-            #   6.6.118-android15-8-maybe-dirty-lakitu
+            #   6.6.143-android15-<kmi>-maybe-dirty-lakitu
             # Cosmetic only: MODVERSIONS same_magic() skips the first vermagic
             # token; vendor module matching is by CRC/flags, not this string.
             tools/bazel build \
@@ -566,7 +566,7 @@ jobs:
           ### AnyKernel setup
           # global properties
           properties() { '
-          kernel.string=dash GKI 6.6.118-android15-8 DroidSpaces + SUSFS + SukiSU Ultra KPM by lakitu12
+          kernel.string=dash GKI 6.6.143 DroidSpaces + SUSFS + SukiSU Ultra KPM by lakitu12
           do.devicecheck=0
           do.modules=0
           do.systemless=0
@@ -594,7 +594,7 @@ jobs:
           sleep 0.5
           chmod -R 755 $AKHOME/tools
 
-          ui_print " Installing dash GKI 6.6.118 kernel (DroidSpaces + SukiSU Ultra)"
+          ui_print " Installing dash GKI 6.6.143 kernel (DroidSpaces + SukiSU Ultra)"
           ui_print " Boot holds kernel only; init_boot / vendor_boot stay untouched"
 
           split_boot
@@ -623,12 +623,12 @@ jobs:
           fi
           if [ "${{ matrix.variant }}" = "ksu" ]; then
             IMG=/tmp/ak3-images/Image-ksu
-            OUT="AnyKernel3-dash-6.6.118-android15-DroidSpaces-SUSFS-SukiSU-KPM${SUFFIX}.zip"
-            RAW="Image-6.6.118-android15-8-lakitu-KSU-KPM${SUFFIX}"
+            OUT="AnyKernel3-dash-6.6.143-android15-DroidSpaces-SUSFS-SukiSU-KPM${SUFFIX}.zip"
+            RAW="Image-6.6.143-android15-8-lakitu-KSU-KPM${SUFFIX}"
           else
             IMG=/tmp/ak3-images/Image-bypass
-            OUT="AnyKernel3-dash-6.6.118-android15-DroidSpaces-BYPASS-noKSU${SUFFIX}.zip"
-            RAW="Image-6.6.118-android15-8-lakitu-BYPASS-noKSU${SUFFIX}"
+            OUT="AnyKernel3-dash-6.6.143-android15-DroidSpaces-BYPASS-noKSU${SUFFIX}.zip"
+            RAW="Image-6.6.143-android15-8-lakitu-BYPASS-noKSU${SUFFIX}"
           fi
           rm -rf /tmp/AnyKernel3
           cp -r /tmp/AnyKernel3-template /tmp/AnyKernel3
@@ -654,7 +654,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: dash-6.6.118-android15-${{ matrix.variant }}
+          name: dash-6.6.143-android15-${{ matrix.variant }}
           path: /tmp/artifacts/*
           if-no-files-found: error
           retention-days: 14
