@@ -4965,7 +4965,7 @@ void sched_post_fork(struct task_struct *p)
 	uclamp_post_fork(p);
 }
 
-unsigned long to_ratio(u64 period, u64 runtime)
+u64 to_ratio(u64 period, u64 runtime)
 {
 	if (runtime == RUNTIME_INF)
 		return BW_UNIT;
@@ -6086,6 +6086,8 @@ static noinline void __schedule_bug(struct task_struct *prev)
 	}
 	check_panic_on_warn("scheduling while atomic");
 
+	trace_android_rvh_schedule_bug(prev);
+
 	dump_stack();
 	add_taint(TAINT_WARN, LOCKDEP_STILL_OK);
 }
@@ -6168,8 +6170,6 @@ __pick_next_task(struct rq *rq, struct task_struct *prev, struct rq_flags *rf)
 		if (unlikely(p == RETRY_TASK))
 			goto restart;
 
-		trace_android_vh_chk_task(&p, rq);
-
 		/* Assume the next prioritized class is idle_sched_class */
 		if (!p) {
 			put_prev_task(rq, prev);
@@ -6184,7 +6184,6 @@ restart:
 
 	for_each_class(class) {
 		p = class->pick_next_task(rq);
-		trace_android_vh_chk_task(&p, rq);
 		if (p)
 			return p;
 	}
@@ -6747,12 +6746,18 @@ static void __sched notrace __schedule(unsigned int sched_mode)
 	struct rq_flags rf;
 	struct rq *rq;
 	int cpu;
+	bool skip_schedule = false;
 
 	cpu = smp_processor_id();
 	rq = cpu_rq(cpu);
 	prev = rq->curr;
 
 	schedule_debug(prev, !!sched_mode);
+
+	trace_android_vh_lock_delay_schedule(prev, sched_mode, &skip_schedule);
+
+	if (skip_schedule)
+		return;
 
 	if (sched_feat(HRTICK) || sched_feat(HRTICK_DL))
 		hrtick_clear(rq);
@@ -6826,6 +6831,7 @@ static void __sched notrace __schedule(unsigned int sched_mode)
 	next = pick_next_task(rq, prev, &rf);
 	clear_tsk_need_resched(prev);
 	clear_preempt_need_resched();
+	trace_android_vh_clear_curr_lazy(prev);
 #ifdef CONFIG_SCHED_DEBUG
 	rq->last_seen_need_resched_ns = 0;
 #endif
@@ -10447,6 +10453,8 @@ void __might_resched(const char *file, int line, unsigned int offsets)
 
 	print_preempt_disable_ip(offsets & MIGHT_RESCHED_PREEMPT_MASK,
 				 preempt_disable_ip);
+
+	trace_android_rvh_schedule_bug(NULL);
 
 	dump_stack();
 	add_taint(TAINT_WARN, LOCKDEP_STILL_OK);
