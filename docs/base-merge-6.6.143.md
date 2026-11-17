@@ -111,12 +111,29 @@ stock OS4 的 638 个 `.ko` 是对 6.6.118 编的，`CONFIG_MODVERSIONS=y` 下�
 两棵树完全一样，所以不影响相对结论。绝对一致性要在 CI 的 kleaf 产物上量，或者直接
 上机看模块加载数。
 
+## 一个隐性的配置变化：动态 task_struct
+
+stock 的 config 里有 `GKI_DYNAMIC_TASK_STRUCT_SIZE=y`，而 AOSP 2026-01 的
+`init/Kconfig.gki` 里根本没有这个 config 定义——`gki_defconfig` 里那句
+`CONFIG_GKI_TASK_STRUCT_VENDOR_SIZE_MAX=1024` 一直被 kconfig 当未定义符号忽略，所以
+6.6.118 那版实际是**关着**的。
+
+ACK 2026-10 把这两个 config 补进了 `init/Kconfig.gki`，于是 `VENDOR_SIZE_MAX=1024`
+的依赖被满足，`olddefconfig` **自动**把 `GKI_DYNAMIC_TASK_STRUCT_SIZE` 打开。也就是说
+升级后这一项从 not set 变成 y，不需要动 fragment，方向上是更接近 stock。
+
+对 ABI 没有影响：`ARCH_WANTS_DYNAMIC_TASK_STRUCT` 只决定 `arch_task_struct_size` 是
+运行期变量还是编译期常量，不改 `struct task_struct` 的定义文本，而 genksyms 只看定义
+文本。单独把这一项在 143 树上开关对比，16754 个导出符号的 CRC **零变化**。
+
 ## 验证
 
 - `bash .github/scripts/verify-tree.sh .` 通过；
 - 全树无冲突 marker；
 - plain make（clang 22）+ `gki_defconfig` + `dash_gki.fragment` 编出 `Image`（6.6.143-4k）；
-- 上面那轮 ABI 对比：118 与 143 用同一套配置各编一次，对比 16424 个共有导出符号。
+- 上面那轮 ABI 对比：118 与 143 用同一套配置各编一次，对比 16424 个共有导出符号；
+- 13 个 OS4 hook 的 KCFI 哈希用 `verify-os4-kcfi.py` 核过，全部与 stock 一致（改用 ACK
+  的定义后仍然对得上，因为 KCFI 只认类型、不认参数名）。
 
 还没做的：CI（kleaf）构建、KMI missing=0 / KCFI 哈希 / 版本串的二进制门禁、上机启动与
 模块加载数。
