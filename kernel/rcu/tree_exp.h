@@ -9,6 +9,8 @@
 
 #include <linux/lockdep.h>
 
+#include <trace/hooks/rcu.h>
+
 static void rcu_exp_handler(void *unused);
 static int rcu_print_task_exp_stall(struct rcu_node *rnp);
 static void rcu_exp_print_detail_task_stall_rnp(struct rcu_node *rnp);

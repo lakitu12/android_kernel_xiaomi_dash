@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # verify-tree.sh <kernel tree>
 #
-# 我方的内核 delta（13 个 OS4 vendor hook + trusty-rescue + pid 钳制）现在**烘在树里**
+# 我方的内核 delta（trusty-rescue + pid 钳制 + DroidSpaces kABI）现在**烘在树里**
 # 而不是构建时打补丁（2026-10-30 起，见 `git log 537ebbfb..`）。所以这一步不做任何
 # 修改，只做源码级门禁：任何一条改动丢了（错误合并、误 revert、上游 tag 误覆盖）
 # 立刻失败，而不是 20 分钟后编出一个静默功能不全的内核。
@@ -46,26 +46,34 @@ android_vh_rcu_boost_start
 android_vh_sync_rcu_wait_end
 android_vh_sync_rcu_wait_start"
 
-H="$TREE/include/trace/hooks/dash_os4_stub.h"
-[ -f "$H" ] || fail "include/trace/hooks/dash_os4_stub.h missing"
-grep -q "TRACE_SYSTEM dash_os4_stub" "$H" || fail "hook header TRACE_SYSTEM wrong"
-grep -q 'include <trace/hooks/dash_os4_stub.h>' "$TREE/drivers/android/vendor_hooks.c" \
-  || fail "vendor_hooks.c does not include the stub header"
-[ -f "$TREE/drivers/android/dash_os4_decl_exports.c" ] \
-  || fail "drivers/android/dash_os4_decl_exports.c (declaration-only CRC TU) missing"
-grep -q 'dash_os4_decl_exports.o' "$TREE/drivers/android/Makefile" \
-  || fail "declaration-only CRC TU not wired into drivers/android/Makefile"
-
+# 2026-11（ACK 6.6.143 同步）起，这 13 个 hook 已由 ACK 自己收进树
+# （vmscan.h / mm.h / fs.h / fuse.h / sched.h / dtask.h / rcu.h），本地不再有
+# dash_os4_stub.h。门禁改成三条：ACK 头里定义还在、调用点还在、export 分工没变
+# （11 个在 vendor_hooks.c，mmap_lock_init/_free 在只声明的 TU 里）。
 for h in $HOOKS; do
-  grep -q "DECLARE_HOOK($h," "$H" || fail "DECLARE_HOOK($h) missing"
-  # 13 个 export：11 个在 vendor_hooks.c，mmap_lock_init/_free 在只声明的 TU 里
-  #（genksyms 只在“没见过 DEFINE_TRACE_FN 定义”时才算出 stock 的 CRC）
+  grep -rq "DECLARE_HOOK($h," "$TREE/include/trace/hooks/" \
+    || fail "DECLARE_HOOK($h) missing from the ACK hook headers"
   grep -q "EXPORT_TRACEPOINT_SYMBOL_GPL($h);" \
       "$TREE/drivers/android/vendor_hooks.c" \
       "$TREE/drivers/android/dash_os4_decl_exports.c" 2>/dev/null \
     || fail "export of $h missing"
   grep -qr "trace_${h}(" "$TREE/mm" "$TREE/fs" "$TREE/kernel" \
     || fail "call site of $h missing (hook would never fire)"
+done
+
+[ -f "$TREE/drivers/android/dash_os4_decl_exports.c" ] \
+  || fail "drivers/android/dash_os4_decl_exports.c (declaration-only CRC TU) missing"
+grep -q 'dash_os4_decl_exports.o' "$TREE/drivers/android/Makefile" \
+  || fail "declaration-only CRC TU not wired into drivers/android/Makefile"
+# mmap_lock_init/_free 只能从只声明的 TU 导出：genksyms 只有在 EXPORT 所在 TU
+# 没见过 DEFINE_TRACE_FN 定义时才算出 stock 的 CRC（见 docs/in-tree-deltas.md）。
+for h in android_vh_mmap_lock_init android_vh_mmap_lock_free; do
+  grep -q "EXPORT_TRACEPOINT_SYMBOL_GPL($h);" \
+      "$TREE/drivers/android/dash_os4_decl_exports.c" \
+    || fail "$h must be exported from dash_os4_decl_exports.c"
+  grep -q "EXPORT_TRACEPOINT_SYMBOL_GPL($h);" \
+      "$TREE/drivers/android/vendor_hooks.c" \
+    && fail "$h must NOT be exported from vendor_hooks.c (CRC mismatch / duplicate export)"
 done
 
 [ -f "$TREE/android/abi_gki_aarch64_dash_os4" ] || fail "android/abi_gki_aarch64_dash_os4 (KMI whitelist) missing"
@@ -109,6 +117,6 @@ grep -q 'pid_max_max = PID_MAX_DEFAULT' "$TREE/kernel/pid.c" \
 echo "in-tree dash delta verified:"
 echo "  trusty-rescue      driver + Kconfig/Makefile hook + nvhe cmdline + CONFIG_TRUSTY_RESCUE=y"
 echo "  DroidSpaces        SYSVIPC kABI padding in sched.h + dash_gki.fragment (SYSVIPC/IPC_NS/PID_NS/DEVTMPFS/MACVLAN/NAT66/..., MODULE_SIG_PROTECT off, CFS_BANDWIDTH/CGROUP_PIDS off), gki_defconfig untouched"
-echo "  os4-vendor-hooks   13 tracehooks declared/exported/called, KMI list wired (13 hooks + LZ4 + find_user/free_uid/futex)"
+echo "  os4-vendor-hooks   13 tracehooks from the ACK tree, all called, export split kept (11 + 2), KMI list wired (13 hooks + LZ4 + find_user/free_uid/futex)"
 echo "  pid-max-clamp      pid space clamped to 32768"
 echo "  (binary gates still to run after the build: CONFIG checks, __ksymtab_*, KCFI hashes)"

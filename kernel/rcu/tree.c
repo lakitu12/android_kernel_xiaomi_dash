@@ -68,7 +68,7 @@
 
 #include "tree.h"
 #include "rcu.h"
-#include <trace/hooks/dash_os4_stub.h>
+#include <trace/hooks/rcu.h>
 
 #ifdef MODULE_PARAM_PREFIX
 #undef MODULE_PARAM_PREFIX

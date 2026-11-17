@@ -27,7 +27,7 @@
  * kcrctab post-processing (556 -> 584 modules, QoS chain comes up).
  */
 #include <linux/tracepoint.h>
-#include <trace/hooks/dash_os4_stub.h>
+#include <trace/hooks/sched.h>
 
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_mmap_lock_init);
 EXPORT_TRACEPOINT_SYMBOL_GPL(android_vh_mmap_lock_free);

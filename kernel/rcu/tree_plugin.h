@@ -10,6 +10,7 @@
  * Author: Ingo Molnar <mingo@elte.hu>
  *	   Paul E. McKenney <paulmck@linux.ibm.com>
  */
+#include <trace/hooks/rcu.h>
 
 #include "../locking/rtmutex_common.h"
 
@@ -1129,11 +1130,11 @@ static int rcu_boost(struct rcu_node *rnp)
 	t = container_of(tb, struct task_struct, rcu_node_entry);
 	rt_mutex_init_proxy_locked(&rnp->boost_mtx.rtmutex, t);
 	raw_spin_unlock_irqrestore_rcu_node(rnp, flags);
-	trace_android_vh_rcu_boost_start(&rnp->boost_mtx, t);
 	/* Lock only for side effect: boosts task t's priority. */
+	trace_android_vh_rcu_boost_start(&rnp->boost_mtx, t);
 	rt_mutex_lock(&rnp->boost_mtx);
-	rt_mutex_unlock(&rnp->boost_mtx);  /* Then keep lockdep happy. */
 	trace_android_vh_rcu_boost_end(&rnp->boost_mtx, t);
+	rt_mutex_unlock(&rnp->boost_mtx);  /* Then keep lockdep happy. */
 	rnp->n_boosts++;
 
 	return READ_ONCE(rnp->exp_tasks) != NULL ||
