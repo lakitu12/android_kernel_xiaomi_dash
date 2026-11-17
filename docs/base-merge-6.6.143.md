@@ -128,16 +128,18 @@ ACK 2026-10 把这两个 config 补进了 `init/Kconfig.gki`，于是 `VENDOR_SI
 
 ## 验证
 
-CI run 44008064045 的 **bypass 变体通过**（ksu 变体倒在无关的上游改名上，见下），
-产物 `Image-6.6.143-android15-8-lakitu-BYPASS-noKSU` 做了独立的离线验收：
+CI run `44010973780` 两个变体（ksu / bypass）都通过，产物做了独立的离线验收：
 
-| 项 | 结果 |
-|---|---|
-| 版本串 | `6.6.143-android15-8-lakitu-4k` |
-| KMI 符号缺口（3652 个模块必需符号） | **missing: 0** |
-| `__ksymtab` 导出条目 | 9360 |
-| 13 个 OS4 hook 的 KCFI 哈希 | 全对（`verify-os4-kcfi.py`） |
-| 内核导出符号 CRC vs 638 个 stock 模块的 `__versions` | **3653 个一致，0 个不符** |
+| 项 | bypass | ksu |
+|---|---|---|
+| 版本串 | `6.6.143-android15-8-lakitu-4k` | 同 |
+| KMI 符号缺口（3652 个模块必需符号） | **missing: 0** | **missing: 0** |
+| `__ksymtab` 导出条目 | 9360 | 9360 |
+| 13 个 OS4 hook 的 KCFI 哈希 | 全对 | 全对 |
+| 内核导出符号 CRC vs 638 个 stock 模块的 `__versions` | **3653 一致 / 0 不符** | **3653 一致 / 0 不符** |
+
+ksu 变体的产物名带 `-KP`（KernelPatch 预补丁已打），镜像里有
+`KernelPatch Version:` 与 `SUKISU_KPM_VERSION` 字样。
 
 CRC 那一项的办法：`vmlinux-to-elf` 还原的 ELF 里没有 `__crc_*`（LOCAL 符号，kallsyms
 不带），但 `__start/__stop___ksymtab{,_gpl}` 和 `__start___kcrctab{,_gpl}` 这些边界符号
@@ -149,6 +151,9 @@ CRC 那一项的办法：`vmlinux-to-elf` 还原的 ELF 里没有 `__crc_*`（LO
 这也顺带证伪了本地 plain make 读数带来的担心：本地编出的 CRC 只有 896/6815 与 stock
 相符，而 CI 的 kleaf 产物是 3653/3653（内核导出的那部分）全中。差异纯粹来自配置不同
 （`SYSVIPC` 等会改 `task_struct` 相关符号），不是 6.6.143 的锅。
+
+还没做的：上机。刷之前先备份当前 boot，刷后重点看模块加载数（stock 638，6.6.118 那版
+实测 584）和 `/dev/kvm` 是否还在。
 
 ## 与内核无关的一次失败
 
