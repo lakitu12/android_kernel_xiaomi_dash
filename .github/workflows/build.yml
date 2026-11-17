@@ -393,7 +393,7 @@ jobs:
           [ -f "$IMG" ] || { echo "::error::Image not found after build"; exit 1; }
           KVER=$(strings "$IMG" | grep -m1 "Linux version 6")
           echo "kernel: $KVER"
-          echo "$KVER" | grep -Eq "^Linux version 6\.6\.118.*-lakitu" || { echo "::error::version drifted: $KVER"; exit 1; }
+          echo "$KVER" | grep -Eq "^Linux version 6\.6\.143.*-lakitu" || { echo "::error::version drifted: $KVER"; exit 1; }
 
           CFG=$GITHUB_WORKSPACE/.github/scripts/extract-ikconfig
           chmod +x "$CFG"

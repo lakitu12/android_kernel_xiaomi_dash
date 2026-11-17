@@ -15,6 +15,24 @@ fail() { echo "::error::in-tree dash delta broken: $*"; exit 1; }
 
 [ -d "$TREE" ] || fail "no such tree: $TREE"
 
+# ------------------------------------------------ 版本三处必须一致
+# 树里的 SUBLEVEL、CI 的版本门禁正则、workflow 里那条 SUBLEVEL gate 是三个独立的
+# 手写数字。升 ACK 基底时漏改任何一处，要么编译前就 fail，要么编完了才在版本门禁
+# 崩（run 44005590705：内核明明是 6.6.143，门禁正则还写着 118，白烧 17 分钟）。
+SUB=$(sed -n 's/^SUBLEVEL[[:space:]]*=[[:space:]]*\([0-9]\+\).*/\1/p' "$TREE/Makefile" | head -n1)
+[ -n "$SUB" ] || fail "cannot read SUBLEVEL from $TREE/Makefile"
+WF="$TREE/.github/workflows/build.yml"
+if [ -f "$WF" ]; then
+  # build.yml 里的门禁是 grep -Eq "^Linux version 6\.6\.NNN.*-lakitu"，用 -F 按字面匹配
+  grep -qF "Linux version 6\\.6\\.${SUB}" "$WF" \
+    || fail "CI version gate does not match SUBLEVEL=$SUB (see the Version gate step in .github/workflows/build.yml)"
+  grep -qF "SUBLEVEL[[:space:]]*=[[:space:]]*${SUB}" "$WF" \
+    || fail "CI SUBLEVEL gate does not match SUBLEVEL=$SUB"
+  # 反过来也要拦：门禁里不该再出现其它 6.6.NNN（改漏一半的典型症状）
+  other=$(sed -n 's/.*Linux version 6\\\.6\\\.\([0-9]\+\).*/\1/p' "$WF" | sort -u | grep -vx "${SUB}" | head -n1 || true)
+  [ -z "$other" ] || fail "CI version gate still carries a stale kernel version: 6.6.$other (tree is 6.6.$SUB)"
+fi
+
 # ------------------------------------------------ trusty-rescue
 [ -f "$TREE/drivers/trusty_rescue/trusty_rescue.c" ] || fail "drivers/trusty_rescue/trusty_rescue.c missing"
 grep -q 'trusty_rescue/Kconfig' "$TREE/drivers/Kconfig" || fail "drivers/Kconfig not hooked"
