@@ -140,9 +140,37 @@ susfs4ksu commit 一起钉死。
 |---|---|---|
 | `b59170724cdc`（2026-10-27） | `0606e19afae9`（2026-10-27） | run 41182178821 构建，刷 boot_b 开机，583 模块 / unknown=0 / KSU 4.3.0 root |
 | `b16e899a555e`（2026-10-30） | `93114563fd6b`（2026-10-29） | run 41193522848 双变体绿，刷 boot_b 开机，583 模块 / unknown=0 / SUSFS 生效（4.x 线） |
+| `4bec532dd447`（2026-11-16） | `f98f08223bbf`（2026-11-15） | run 45326274881 双变体绿，刷 boot_a 开机，2026-11-24 验收见下（Nova 3.x 线） |
 
-`4bec532` + `f98f082`（Nova 3.x）只做到「本地静态门禁通过」，还没上过机，上机之前
-不要把它当成已知可开机组合。
+### `4bec532` + `f98f082` 的上机验收（2026-11-24）
+
+刷的是 ksu 变体的 `Image`（sha256 `2aa09aa8…`），落在 `boot_a`，活动槽 `_a`。
+
+```
+Kernel Version: 30007        (ksud debug version → 3.x 线)
+uapi_version: 6              (与 Nova APK 一致)
+runtime_mode: built-in, lkm: false
+SUSFS: v2.4.0, implementation builtin
+SUSFS features: 10 项，含 CONFIG_KSU_SUSFS_PRIORITY_UID_FILTER
+KPM: extension check → supported
+管理器: com.sukisu.nova 已认证
+su: uid=0 context=u:r:ksu:s0，Seccomp 0 / Seccomp_filters 0
+模块: lsmod 584 行，dmesg unknown symbol = 0
+```
+
+`boot_a` 分区里的 kernel 与 CI 产物 Image 逐字节相同，说明跑的就是 CI 编的那份。
+回滚槽 `boot_b` 还是 6.6.118 + SUSFS v2.3.0（`com.sukisu.ultra`），切回去要同步换回
+Ultra 4.x 的 APK，否则管理器对不上、表现为没有 root。
+
+已知现象（不是这次引入的）：启动期 dmesg 有 3 条
+`WARNING at kernel/seccomp.c:576 seccomp_filter_release`，调用链是
+`ksu_handle_setresuid → seccomp_filter_release`。原因是 KSU 按
+`LINUX_VERSION_CODE >= 6.11` 才设 `PF_EXITING`，而 6.6.143 这个 ACK 已经 backport 了
+6.11 的 `WARN_ON((tsk->flags & PF_EXITING) == 0)` 检查，于是走 `#elif >= 5.11` 分支只设了
+`sighand`、WARN 后直接 return。影响是旧 filter 的引用计数没被 put（每次一个，量级很小）
+并打印一份寄存器 dump；seccomp 本身已经靠 `current->seccomp.filter = NULL` 解除，
+实测 `su -c` 的 `Seccomp: 0`，功能不受影响。4.x 的 `app_profile.c` 这段与 3.x 逐字节相同，
+所以老内核同样会有这几条。
 
 `b5917072` 之后上游把 `allowlist.c` 的 `fall through` 注释改成了带版本判断的写法，我们的
 sed 重写对新 pin 无害，等确认稳定后可以删掉。
