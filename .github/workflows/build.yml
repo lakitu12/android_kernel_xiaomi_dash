@@ -1,4 +1,4 @@
-name: Build dash GKI 6.6.143 - DroidSpaces + SukiSU Ultra (KPM + SUSFS)
+name: Build dash GKI 6.6.143 - DroidSpaces + SukiSU Nova (KPM + SUSFS)
 
 on:
   workflow_dispatch:
@@ -149,36 +149,42 @@ jobs:
       # DroidSpaces 的 kABI padding（include/linux/sched.h）和所需 config
       # （SYSVIPC/POSIX_MQUEUE/IPC_NS/PID_NS/DEVTMPFS/...）都烘在树里，CI 不再
       # 改 defconfig；下面只处理 KSU/SUSFS/KernelPatch 这些外部注入。
-      - name: Setup SukiSU Ultra builtin + KPM + SUSFS configs
+      - name: Setup SukiSU Nova builtin + KPM + SUSFS configs
         if: matrix.variant == 'ksu'
         run: |
           set -e
           cd ~/gki
           # PIN builtin branch: it defines KSU_SUSFS* Kconfig symbols + KSU-side SUSFS impl.
           # No-arg setup.sh checks out latest release tag (main-based) which LACKS SUSFS symbols
-          # -> all 10 KSU_SUSFS defconfig entries silently dropped by kconfig (marble lesson).
+          # -> all KSU_SUSFS defconfig entries silently dropped by kconfig (marble lesson).
           # DRIFT GUARD (run 34441463481, 2026-09-10): floating `builtin` branch broke.
           # builtin@e2912817f4 (v4.2.0) deleted kernel_umount_feature_set() but LEFT
           # `.set_handler = kernel_umount_feature_set` -> clang "use of undeclared
           # identifier" after ~12 min of build. That breakage is fixed upstream now
           # (verified at the pin below: handler is defined again), and the x86-style
           # fail-fast just below still catches any regression in seconds.
-          # VERSION FREEZE (2026-10-31). Policy: pin one exact commit per component,
+          # VERSION FREEZE. Policy: pin one exact commit per component,
           # never a branch tip and never "latest source". See docs/version-pins.md.
           #
           # Why the pin is on `builtin` and not on a release tag: the release line
           # (main) carries ZERO KSU_SUSFS Kconfig symbols - verified on v4.3.0
           # (2026-10-29) with `grep -c KSU_SUSFS kernel/Kconfig` = 0, while
-          # builtin@b16e899a = 10. `builtin` publishes no tags/releases, so the
-          # closest thing to "the v4.3.0 release, with SUSFS" is the builtin tip
-          # from the same day.
+          # builtin@4bec532 = 11. `builtin` publishes no tags/releases.
           #
-          # KSU b16e899a (2026-10-29 17:45Z, same day as release v4.3.0):
-          #   + 85d3b048 fix(kernel): align SELinux hide policy parsing (#3936)
-          #   + b16e899a fix 0b666cad breaks clang GKI builds (allowlist.c
-          #     fallthrough guarded by LINUX_VERSION_CODE) <- this one matters here
-          # Previous known-good pin was b59170724cdc (2026-10-27).
-          KSU_PIN=b16e899a555e
+          # KSU 4bec532 (2026-11-16 01:23 +0800) - first pin on the rebranded line.
+          # Upstream 2026-11-16 c60f21b9 "rename SukiSU-Ultra to SukiSU-Nova /
+          # Rebrand the project and start a fresh 3.x version line" moved the repos
+          # to the SukiSU-Nova org AND reset the version line:
+          #   old (b16e899a) VERSION_BASE 40000 / VERSION_TAG 4.2.1
+          #   new (4bec532)  VERSION_BASE 30000 / VERSION_TAG 3.0.0
+          # `builtin` carried that reset too (it is not a child of main, but its
+          # Makefile is already on the 3.x numbers), so a kernel built from this
+          # pin reports a 3.x version and needs a SukiSU Nova 3.x manager APK.
+          # Do not mix it with a 4.x Ultra APK.
+          #   + adds KSU_SUSFS_PRIORITY_UID_FILTER -> Kconfig now exposes 11
+          #     ^config KSU_SUSFS entries (was 10 at b16e899a)
+          # Previous pins: b16e899a555e (2026-10-30, 4.x line), b59170724cdc (2026-10-27).
+          KSU_PIN=4bec532dd447e2852aa8932afa768255350c103a
           # 上游 2026-11 把仓库从 ShirkNeko/ 与 SukiSU-Ultra/ 迁到 SukiSU-Nova/ 组织；
           # 旧名对 raw.githubusercontent.com 不再可靠（kpimg 实测 404，run 44008064045）。
           #
@@ -220,7 +226,7 @@ jobs:
           # breakage in seconds instead of burning ~12 min of build):
           KU=common/drivers/kernelsu/feature/kernel_umount.c
           if grep -q '\.set_handler = kernel_umount_feature_set' "$KU" && ! grep -q 'static int kernel_umount_feature_set' "$KU"; then
-            echo "::error::SukiSU $KSU_PIN: kernel_umount.c references missing kernel_umount_feature_set() - upstream compile breakage, re-pin a good builtin commit"
+            echo "::error::SukiSU Nova $KSU_PIN: kernel_umount.c references missing kernel_umount_feature_set() - upstream compile breakage, re-pin a good builtin commit"
             exit 1
           fi
           echo "kernel_umount.c handler refs OK"
@@ -263,12 +269,18 @@ jobs:
           #     after ~9 min). c05208e "susfs: Add priority uid filter" introduces
           #     them; pin the branch tip, which also carries c05208e's follow-up
           #     UAF fix (0606e19).
-          # SUSFS pin moves with the KSU pin (same window). 9311456 (2026-10-29
-          # "KernelSU: Fix compiler error") only touches
-          # kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch (main-lineage
-          # setup, unused here); the kernel-side files we copy and the 50_ patch
-          # are byte-identical to 0606e19 (2026-10-27, the previous pin).
-          SUSFS_PIN=93114563fd6b08092b9ce8c0309738c921ac8bd1
+          # SUSFS pin moves with the KSU pin (same window), in BOTH directions.
+          # 9311456 (2026-10-29) was the pairing for builtin@b16e899a; the Nova
+          # pin above calls susfs_add_sus_type() and
+          # susfs_add_sus_avd_allowed_by_type() from kernel/selinux/sepolicy.c,
+          # which 9311456 does not provide - verified locally, the pairing gate
+          # rejects that combination. Both arrive with 8934afa "kernel & KernelSU:
+          # Refactor selinux_hide(...)".
+          # f98f082 (2026-11-15 "kernel & KernelSU: Sync with upstream") is the
+          # branch tip from the same window as the KSU pin and carries them
+          # (SUSFS v2.4.0, was v2.3.0). Its 50_ patch also brings the selinux
+          # services.c/status.c hooks the new KSU expects.
+          SUSFS_PIN=f98f08223bbf469cc0a1542166383d253557fc32
           git clone -q https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android15-6.6 /tmp/susfs4ksu
           git -C /tmp/susfs4ksu checkout -q "$SUSFS_PIN"
           # Fail-fast #2 (the full both-direction check runs right after the 50_
@@ -297,8 +309,8 @@ jobs:
           # cwd is common/ here (the symlink was created in ~/gki), so use the
           # tree-relative path; grep -c exits 1 on zero matches -> || true.
           KSU_SUSFS_CFG=$(grep -c '^config KSU_SUSFS' drivers/kernelsu/Kconfig || true)
-          [ "$KSU_SUSFS_CFG" = "10" ] \
-            || { echo "::error::KSU tree exposes $KSU_SUSFS_CFG KSU_SUSFS Kconfig entries, want 10 (pin drifted to a release/main commit?)"; exit 1; }
+          [ "$KSU_SUSFS_CFG" = "11" ] \
+            || { echo "::error::KSU tree exposes $KSU_SUSFS_CFG KSU_SUSFS Kconfig entries, want 11 (pin drifted to a release/main commit?)"; exit 1; }
           echo "--- pinned versions ---"
           echo "  KSU    $KSU_PIN ($(git -C ../KernelSU log -1 --format=%cd --date=short))"
           echo "  SUSFS  $SUSFS_PIN  $SUSFS_VER ($(git -C /tmp/susfs4ksu log -1 --format=%cd --date=short))"
@@ -332,7 +344,7 @@ jobs:
           sed -i 's/POST_DEFCONFIG_CMDS="check_defconfig"/POST_DEFCONFIG_CMDS="true"/' \
             ~/gki/common/build.config.gki || true
           DEFCONFIG=~/gki/common/arch/arm64/configs/gki_defconfig
-          for CFG in KSU KPM KSU_MANUAL_SU KSU_SUSFS KSU_SUSFS_SUS_PATH KSU_SUSFS_SUS_MOUNT KSU_SUSFS_SUS_KSTAT KSU_SUSFS_SPOOF_UNAME KSU_SUSFS_ENABLE_LOG KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG KSU_SUSFS_OPEN_REDIRECT KSU_SUSFS_SUS_MAP; do
+          for CFG in KSU KPM KSU_MANUAL_SU KSU_SUSFS KSU_SUSFS_SUS_PATH KSU_SUSFS_SUS_MOUNT KSU_SUSFS_SUS_KSTAT KSU_SUSFS_SPOOF_UNAME KSU_SUSFS_ENABLE_LOG KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG KSU_SUSFS_OPEN_REDIRECT KSU_SUSFS_SUS_MAP KSU_SUSFS_PRIORITY_UID_FILTER; do
             sed -i "/^# CONFIG_${CFG} is not set/d; /^CONFIG_${CFG}=/d" "$DEFCONFIG"
             echo "CONFIG_${CFG}=y" >> "$DEFCONFIG"
           done
@@ -350,7 +362,7 @@ jobs:
           esac
           case ",${KSU_OPTS}," in
             *,no_susfs_feats,*)
-              for F in SUS_PATH SUS_MOUNT SUS_KSTAT SPOOF_UNAME ENABLE_LOG HIDE_KSU_SUSFS_SYMBOLS SPOOF_CMDLINE_OR_BOOTCONFIG OPEN_REDIRECT SUS_MAP; do
+              for F in SUS_PATH SUS_MOUNT SUS_KSTAT SPOOF_UNAME ENABLE_LOG HIDE_KSU_SUSFS_SYMBOLS SPOOF_CMDLINE_OR_BOOTCONFIG OPEN_REDIRECT SUS_MAP PRIORITY_UID_FILTER; do
                 sed -i "s/^CONFIG_KSU_SUSFS_${F}=y$/# CONFIG_KSU_SUSFS_${F} is not set/" "$DEFCONFIG"
               done
               echo "KSU_OPTS: all SUSFS features=off";;
@@ -579,13 +591,13 @@ jobs:
             || { echo "::error::AK3 magiskpolicy size != 356584 (0fc75698 known-good)"; exit 1; }
           cat > /tmp/ak3-anykernel.sh <<'AKSH'
           ### AnyKernel3 Ramdisk Mod Script
-          ## dash GKI 6.6 by lakitu12 (template: Numbersf/AnyKernel3, SukiSU app-compatible)
+          ## dash GKI 6.6 by lakitu12 (template: Numbersf/AnyKernel3, SukiSU Nova app-compatible)
           ## osm0sis @ xda-developers
 
           ### AnyKernel setup
           # global properties
           properties() { '
-          kernel.string=dash GKI 6.6.143 DroidSpaces + SUSFS + SukiSU Ultra KPM by lakitu12
+          kernel.string=dash GKI 6.6.143 DroidSpaces + SUSFS + SukiSU Nova KPM by lakitu12
           do.devicecheck=0
           do.modules=0
           do.systemless=0
@@ -613,7 +625,7 @@ jobs:
           sleep 0.5
           chmod -R 755 $AKHOME/tools
 
-          ui_print " Installing dash GKI 6.6.143 kernel (DroidSpaces + SukiSU Ultra)"
+          ui_print " Installing dash GKI 6.6.143 kernel (DroidSpaces + SukiSU Nova)"
           ui_print " Boot holds kernel only; init_boot / vendor_boot stay untouched"
 
           split_boot
@@ -642,7 +654,7 @@ jobs:
           fi
           if [ "${{ matrix.variant }}" = "ksu" ]; then
             IMG=/tmp/ak3-images/Image-ksu
-            OUT="AnyKernel3-dash-6.6.143-android15-DroidSpaces-SUSFS-SukiSU-KPM${SUFFIX}.zip"
+            OUT="AnyKernel3-dash-6.6.143-android15-DroidSpaces-SUSFS-SukiSUNova-KPM${SUFFIX}.zip"
             RAW="Image-6.6.143-android15-8-lakitu-KSU-KPM${SUFFIX}"
           else
             IMG=/tmp/ak3-images/Image-bypass

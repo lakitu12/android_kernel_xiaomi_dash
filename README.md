@@ -1,7 +1,7 @@
-# dash GKI 6.6.143 内核（DroidSpaces + SukiSU Ultra）
+# dash GKI 6.6.143 内核（DroidSpaces + SukiSU Nova）
 
 Redmi Turbo 5 Max（dash，MT6991Z，天玑 9500s）的 Android 15 GKI 内核，带 DroidSpaces
-容器支持、SukiSU Ultra root（SUSFS + KPM），以及擦除 gz 之后相机链的自救驱动。
+容器支持、SukiSU Nova root（SUSFS + KPM），以及擦除 gz 之后相机链的自救驱动。
 
 内核源码整个在仓库根目录，CI 只同步构建基建（kleaf + prebuilts），编译的就是仓库里的提交。
 构建期从外部拉 SukiSU、SUSFS、KernelPatch 三样，都按 commit 钉死，不入库。
@@ -15,7 +15,7 @@ Redmi Turbo 5 Max（dash，MT6991Z，天玑 9500s）的 Android 15 GKI 内核，
 - 树内 delta：kABI padding、trusty-rescue + `kvm-arm.mode=nvhe`、pid 钳制、
   `dash_gki.fragment`；13 个 OS4 vendor hook 自 2026-10 起由 ACK 基底自带
   （见 [docs/in-tree-deltas.md](docs/in-tree-deltas.md)）
-- SukiSU Ultra `builtin` + susfs4ksu `gki-android15-6.6`：构建期注入
+- SukiSU Nova `builtin` + susfs4ksu `gki-android15-6.6`：构建期注入
 - KernelPatch：构建期把 kpimg 预补丁进 Image，KPM 才能用
 
 为什么用小米树而不是 AOSP ACK：stock 版本串带 `-abogki-` 前缀，说明 MTK 是在 AOSP GKI
@@ -52,7 +52,7 @@ git fetch https://android.googlesource.com/kernel/common
 
 CI 在 push 到 `main` 或手动 `Run workflow` 时跑，矩阵两个变体：
 
-- `ksu`：SukiSU builtin + SUSFS + KernelPatch 预补丁
+- `ksu`：SukiSU Nova builtin + SUSFS + KernelPatch 预补丁
 - `bypass`：同一棵树，KSU 关掉
 
 产物是 `Image` 和 AnyKernel3 zip，版本串 `6.6.143-android15-8-lakitu`。
@@ -110,7 +110,7 @@ VETH、CGROUP_FREEZER、MEMCG stock 已有，swap limit 随 MEMCG 自动可用�
 - 基底（vendor）：<https://github.com/MiCode/Xiaomi_Kernel_OpenSource>（`dash-w-oss`）
 - 基底（upstream）：<https://android.googlesource.com/kernel/common>（`android15-6.6-2026-10_r3`）
 - DroidSpaces：<https://github.com/ravindu644/Droidspaces-OSS>
-- SukiSU Ultra：<https://github.com/SukiSU-Nova/SukiSU-Nova>（`builtin` 分支；原名 SukiSU-Ultra）
+- SukiSU Nova：<https://github.com/SukiSU-Nova/SukiSU-Nova>（`builtin` 分支；原名 SukiSU-Ultra，2026-11 改名并切到 3.x 版本线）
 - SUSFS：<https://gitlab.com/simonpunk/susfs4ksu>（`gki-android15-6.6`）
 - KernelPatch：<https://github.com/bmax121/KernelPatch>
 - kpimg：<https://github.com/SukiSU-Nova/SukiSU_patch>
