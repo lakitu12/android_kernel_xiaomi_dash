@@ -164,3 +164,32 @@ run 44008064045 的 ksu 变体在 `KernelPatch 预补丁` 步骤失败，与本�
 换名前后核过内容：新路径的 kpimg sha256 仍是 `14fc6564…`（与 `KPIMG_SHA256` 一致），
 `setup.sh` 与旧路径同哈希。`SukiSU-Ultra/SukiSU-Ultra` 也一起迁到了 `SukiSU-Nova/`，
 一并改了。
+## 后续：`setup.sh` 又从 GitHub 挪走了（2026-11-24）
+
+run 44980731191（2026-11-22，workflow_dispatch）的 ksu 变体在
+`Setup SukiSU Ultra builtin + KPM + SUSFS configs` 失败，不再是 kpimg 404，而是
+KSU 检出的提交不对：
+
+```
+error: pathspec 'b16e899a555e' did not match any file(s) known to git
+[-] Checkout default branch
+...
+::error::KSU/SUSFS pin mismatch - the two pins must move together:
+  - ksu_handle_execveat(): added by the susfs kernel patch, missing from the pinned KSU tree
+  （共 10 个）
+```
+
+原因是 `main` 分支的 `kernel/setup.sh` 把 clone 源换成了第三方自建 Gitea
+（`git.zako.shirkneko.top:20004/shirkneko/SukiSU`），那份历史里没有
+`builtin@b16e899a`，于是 `git checkout` 落到 `|| echo "[-] Checkout default branch"`
+分支，拿到的是没有 `KSU_SUSFS` 符号的默认分支；配对门禁如实报错。
+
+同一个 commit 在 `https://github.com/SukiSU-Nova/SukiSU-Nova` 上仍然存在，实测
+`git clone --filter=blob:none` + `git checkout b16e899a555e` 可以检出，`kernel/Kconfig`
+里 `^config KSU_SUSFS` 仍是 10 项，`check-susfs-pair.py` 离线跑通（17 个 `ksu_*()`
+引用、32 个 `susfs_*()` 调用）。
+
+所以 CI 不再调用上游 `setup.sh`：自己 clone + checkout + 注入 symlink 和
+`drivers/{Makefile,Kconfig}` 条目（与 `builtin` 分支 `setup.sh` 的三步等价），并断言
+检出结果。`setup.sh` 的克隆源已经不是第一次漂了（旧组织名 → 新组织 name → 第三方
+Gitea），把"从哪 clone、检出哪个提交"留在自己手里更省事。

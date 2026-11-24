@@ -181,8 +181,25 @@ jobs:
           KSU_PIN=b16e899a555e
           # 上游 2026-11 把仓库从 ShirkNeko/ 与 SukiSU-Ultra/ 迁到 SukiSU-Nova/ 组织；
           # 旧名对 raw.githubusercontent.com 不再可靠（kpimg 实测 404，run 44008064045）。
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Nova/SukiSU-Nova/main/kernel/setup.sh" | bash -s "$KSU_PIN"
+          #
+          # 2026-11-24：不再调用上游 setup.sh。main 分支的 setup.sh 已把 clone 源换成
+          # 第三方自建 Gitea（git.zako.shirkneko.top:20004/shirkneko/SukiSU），那份历史里
+          # 没有 builtin@b16e899a -> checkout 静默失败（"Checkout default branch"），拿到
+          # 的是无 KSU_SUSFS 的默认分支，配对门禁报 10 个 ksu_*() 缺失（run 44980731191）。
+          # setup.sh 本身不 pin、克隆源还会漂，所以这里自己 clone + checkout + 注入：
+          # 内容与 builtin 分支 setup.sh 的三步（symlink / drivers/Makefile /
+          # drivers/Kconfig）等价，只是把"从哪 clone、检出哪个提交"拿回自己手里。
+          git clone -q --filter=blob:none https://github.com/SukiSU-Nova/SukiSU-Nova.git "$HOME/gki/KernelSU"
+          git -C "$HOME/gki/KernelSU" checkout -q "$KSU_PIN"
+          [ "$(git -C "$HOME/gki/KernelSU" rev-parse HEAD)" = "$(git -C "$HOME/gki/KernelSU" rev-parse "$KSU_PIN")" ] \
+            || { echo "::error::KSU checkout != KSU_PIN $KSU_PIN"; exit 1; }
+          ln -sfn ../../KernelSU/kernel common/drivers/kernelsu
+          grep -q kernelsu common/drivers/Makefile \
+            || printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> common/drivers/Makefile
+          grep -q 'drivers/kernelsu/Kconfig' common/drivers/Kconfig \
+            || sed -i '/endmenu/i\source "drivers/kernelsu/Kconfig"' common/drivers/Kconfig
           ls -l common/drivers/kernelsu
+          echo "KSU $KSU_PIN ($(git -C "$HOME/gki/KernelSU" log -1 --format=%cd --date=short))"
           # This build runs clang with -Werror,-Wimplicit-fallthrough, and clang
           # does not accept the legacy "/* fall through */" comment in C mode -
           # it wants the statement (the kernel's fallthrough macro, in-tree since
@@ -272,7 +289,7 @@ jobs:
 
           # ---- version-freeze assertions (docs/version-pins.md) ----
           # These are intentionally hard-coded: if someone bumps one pin without the
-          # other, or if setup.sh silently checks out something else, fail in seconds.
+          # other, or if the clone/checkout above drifts, fail in seconds.
           [ "$(git -C ../KernelSU rev-parse HEAD)" = "$(git -C ../KernelSU rev-parse "$KSU_PIN")" ] \
             || { echo "::error::KSU checkout != KSU_PIN $KSU_PIN"; exit 1; }
           [ "$(git -C /tmp/susfs4ksu rev-parse HEAD)" = "$SUSFS_PIN" ] \
@@ -284,7 +301,7 @@ jobs:
             || { echo "::error::KSU tree exposes $KSU_SUSFS_CFG KSU_SUSFS Kconfig entries, want 10 (pin drifted to a release/main commit?)"; exit 1; }
           echo "--- pinned versions ---"
           echo "  KSU    $KSU_PIN ($(git -C ../KernelSU log -1 --format=%cd --date=short))"
-          echo "  SUSFS  $SUSFS_PIN  $(grep -m1 'SUSFS_VERSION' include/linux/susfs.h | cut -d'\"' -f2) ($(git -C /tmp/susfs4ksu log -1 --format=%cd --date=short))"
+          echo "  SUSFS  $SUSFS_PIN  $SUSFS_VER ($(git -C /tmp/susfs4ksu log -1 --format=%cd --date=short))"
           echo "  KSU_SUSFS Kconfig entries: $KSU_SUSFS_CFG"
 
           # KSU_OPTS=nohooks：把 SUSFS 的「当前进程是否标记 no_su」判定钉成 true，

@@ -12,6 +12,25 @@
 | kpimg | `SukiSU-Nova/SukiSU_patch` @ `eec45788c9a1` | CI `KPIMG_COMMIT` / `KPIMG_SHA256` |
 | AnyKernel3 | `Numbersf/AnyKernel3` | CI `AK3_PIN` |
 
+## 怎么检出
+
+CI 不调用 SukiSU 仓库里的 `setup.sh`，自己 clone + checkout：
+
+```bash
+git clone --filter=blob:none https://github.com/SukiSU-Nova/SukiSU-Nova.git ~/gki/KernelSU
+git -C ~/gki/KernelSU checkout <KSU_PIN>
+```
+
+`setup.sh` 只额外做三件事——建 `drivers/kernelsu` 软链、往 `drivers/Makefile` 加
+`obj-$(CONFIG_KSU) += kernelsu/`、往 `drivers/Kconfig` 加 `source "drivers/kernelsu/Kconfig"`，
+CI 里照抄这三步并断言 `HEAD == KSU_PIN`。
+
+不调用它的原因：`setup.sh` 的克隆源漂过三次（`ShirkNeko/` → `SukiSU-Ultra/` →
+2026-11 起的第三方自建 Gitea `git.zako.shirkneko.top:20004/shirkneko/SukiSU`），
+最后一次在 run 44980731191 直接把构建打红：那份 Gitea 历史里没有
+`builtin@b16e899a`，`git checkout` 失败后落到 `|| echo "[-] Checkout default branch"`，
+拿到没有 `KSU_SUSFS` 的默认分支，配对门禁报 10 个 `ksu_*()` 缺失。
+
 ## 为什么不用 release tag
 
 SukiSU 的 release 走 main 线，**不带 built-in SUSFS**：
